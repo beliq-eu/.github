@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "timezone": "UTC",
+  "schedule": ["before 3am on Monday"],
+  "packageRules": [
+    {
+      "description": "Group patch and digest updates together",
+      "matchUpdateTypes": ["patch", "digest"],
+      "groupName": "dependency updates (patches)"
+    },
+    {
+      "description": "Group minor updates together",
+      "matchUpdateTypes": ["minor"],
+      "groupName": "dependency updates (minor)"
+    },
+    {
+      "description": "Keep major updates in a separate group",
+      "matchUpdateTypes": ["major"],
+      "groupName": "dependency updates (major)"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "assignees": ["tobias-dev"]
+  }
+}
