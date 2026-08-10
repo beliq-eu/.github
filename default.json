@@ -19,9 +19,9 @@
       "groupName": "dependency updates (minor)"
     },
     {
-      "description": "Keep major updates in a separate group",
+      "description": "One PR per major. Sharing a branch means a single package whose peer ranges have not caught up blocks every other major behind the same failed install, and a batch of breaking changes cannot be reviewed, merged or reverted one at a time.",
       "matchUpdateTypes": ["major"],
-      "groupName": "dependency updates (major)"
+      "groupName": null
     }
   ],
   "vulnerabilityAlerts": {
