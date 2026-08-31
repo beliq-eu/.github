@@ -9,6 +9,11 @@
   "schedule": ["before 3am on Monday"],
   "packageRules": [
     {
+      "description": "Pin every GitHub Action to a full commit SHA. A tag is mutable: whoever can move `v4` can run their code inside a workflow holding GHCR push credentials, sibling PATs and deploy access. Scoped to github-actions on purpose -- pinning Docker tags too would freeze the `:latest` the engine deploy moves by hand.",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true
+    },
+    {
       "description": "Group patch and digest updates together",
       "matchUpdateTypes": ["patch", "digest"],
       "groupName": "dependency updates (patches)"
