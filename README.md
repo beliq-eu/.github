@@ -32,6 +32,16 @@ Repo with a PR-triggered CI check:
 }
 ```
 
+### Consumers in another org
+
+`local>` resolves against the platform, not the org, so both forms above reach this repo
+from anywhere on github.com. The ten `tobias-dev` repos on this policy (`bq-api`, `bq-db`,
+`bq-dashboard`, `bq-docs`, `bq-email`, `bq-engine`, `bq-infra`, `bq-landing`,
+`bq-load-tests`, `bq-types`) spell it `github>beliq-eu/.github:automerge`, and that is the
+form to keep using there. The two are interchangeable, so a repo already wired one way
+stays that way: the only thing worth checking in a new repo is that it extends this preset
+at all.
+
 ## GitHub Actions policy
 
 Two rules. They apply to `.github/workflows/**` **and** to any `action.yml` this org
