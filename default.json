@@ -34,6 +34,17 @@
       "matchUpdateTypes": ["major"],
       "matchPackageNames": ["vitest", "@vitest/**"],
       "groupName": "vitest (major)"
+    },
+    {
+      "description": "typescript-eslint and its @typescript-eslint/* packages peer-require each other on a matching major, so a lone major for one of them can never install: the eslint-plugin PR asks for a parser major that is still on the old one, and the parser PR fails the mirror image of the same conflict. Five of these sat red for 28 days across activepieces-beliq, beliq-cli and beliq-mcp, each blocked on a sibling PR that was itself blocked. They release in lockstep, so they take one branch. Same exception as vitest above, and it has to sit below the one-PR-per-major rule to win.",
+      "matchUpdateTypes": ["major"],
+      "matchPackageNames": ["typescript-eslint", "@typescript-eslint/**"],
+      "groupName": "typescript-eslint (major)"
+    },
+    {
+      "description": "typescript-eslint peers typescript >=4.8.4 <6.1.0 and throws `typescript-eslint does not support TS 7.0` when it loads, so a typescript 7 update cannot lint in any repo that uses it and the PR can never go green. Ten were open across both owners. Lift when typescript-eslint ships TS >=7.1 support; https://github.com/typescript-eslint/typescript-eslint/issues/10940 tracks it. A repo that does not use typescript-eslint overrides this in its own renovate.json.",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<6.1.0"
     }
   ],
   "vulnerabilityAlerts": {
