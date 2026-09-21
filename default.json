@@ -42,6 +42,12 @@
       "groupName": "typescript-eslint (major)"
     },
     {
+      "description": "astro and its @astrojs/* integrations move together: the integration reaches Astro's markdown renderer as a transitive dependency of `astro` itself, so bumping the integration alone leaves the old renderer in the tree. @astrojs/mdx 8 on astro 7 fails the build with \"`@astrojs/markdown-satteri` is too old to render `.mdx` files\", and Astro's own message notes that a caret range on the older version will not pick it up. Same lockstep exception as vitest and typescript-eslint above.",
+      "matchUpdateTypes": ["major"],
+      "matchPackageNames": ["astro", "@astrojs/**"],
+      "groupName": "astro (major)"
+    },
+    {
       "description": "typescript-eslint peers typescript >=4.8.4 <6.1.0 and throws `typescript-eslint does not support TS 7.0` when it loads, so a typescript 7 update cannot lint in any repo that uses it and the PR can never go green. Ten were open across both owners. Lift when typescript-eslint ships TS >=7.1 support; https://github.com/typescript-eslint/typescript-eslint/issues/10940 tracks it. A repo that does not use typescript-eslint overrides this in its own renovate.json.",
       "matchPackageNames": ["typescript"],
       "allowedVersions": "<6.1.0"
