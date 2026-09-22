@@ -53,6 +53,19 @@
       "allowedVersions": "<6.1.0"
     }
   ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Seven release workflows pin the npm CLI itself with `npm install -g npm@<version>`, so a publish cannot silently move to a newly released npm. No built-in manager reads a version inside a `run:` line, so without this manager the pin freezes on the day it was typed. Proven 2026-09-22 by running Renovate against a copy of beliq-cli with the pin lowered to 11.5.1: it extracted zero dependencies named npm, and only after the marker comment and this manager were added did it propose 11.19.1 and 12.0.2. The marker comment above each site is what makes the line readable, and `scripts/check-custom-managers.mjs` in this repo fails when a claimed workflow carries a marker the regex cannot read, or an `npm install -g npm@` line carries no marker. The built-in `customManagers:githubActionsVersions` preset does not cover this shape: it only reads `<NAME>_VERSION:` environment variables. `astral-sh/setup-uv`'s `version:` input needs no marker, because the `github-actions` manager already extracts it as a `uses-with` dependency. Scoped to `ci.yml` and `release.yml` rather than every workflow so it does not also claim beliq-validate-action's `.github/workflows/test-action.yml`, whose pin that repo's own custom manager owns: a preset manager and a repo manager both apply, so an overlapping file pattern reads the same line twice. npm majors arrive as their own PR under the one-PR-per-major rule above, and merging one means checking npm's `engines` against each workflow's `node-version`: npm 12.0.2 requires node `^22.22.2 || ^24.15.0 || >=26.0.0`.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.ya?ml$/",
+        "/^\\.github/workflows/release\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>[a-z0-9@/._-]+?)\\s+[^\\n]*?(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ]
+    }
+  ],
   "vulnerabilityAlerts": {
     "labels": ["security"],
     "assignees": ["tobias-dev"]

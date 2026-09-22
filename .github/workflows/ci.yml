@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  presets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+
+      # Deliberately unpinned. The validator's job is to reject config the bot will reject,
+      # so it should track whatever Renovate the hosted Mend app is running rather than a
+      # version frozen here. `managerFilePatterns` replacing `fileMatch` in Renovate 41 is
+      # the kind of change this catches early.
+      - name: Validate the presets
+        run: npx --yes --package renovate renovate-config-validator --strict default.json automerge.json
+
+      # The validator only reads this repo, so it cannot tell a working custom manager from
+      # one whose file pattern matches nothing in any consuming repo. That gap is why the
+      # `npm install -g npm@12.0.2` pin sat unread from 2026-09-19 to 2026-09-22.
+      - name: Clone the repos these presets apply to
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate '/users/beliq-eu/repos?per_page=100' \
+            --jq '.[] | select(.archived | not) | .name' | grep -vx '.github' > consumers.txt
+          test -s consumers.txt
+          mkdir -p consumers
+          while read -r repo; do
+            git clone --depth 1 --quiet "https://github.com/beliq-eu/$repo.git" "consumers/$repo"
+          done < consumers.txt
+          echo "cloned $(wc -l < consumers.txt) repositories"
+
+      - name: Every marker comment is read, every npm pin carries one
+        run: node scripts/check-custom-managers.mjs consumers/*
