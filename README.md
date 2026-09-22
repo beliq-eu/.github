@@ -7,7 +7,8 @@ Org-wide Renovate presets. Repos reference these instead of duplicating the full
 - `default.json` (`local>beliq-eu/.github`) — base policy: weekly schedule, dependency
   dashboard, semantic commits, grouped patch and minor updates, one PR per major (the one
   exception being the vitest family, whose packages peer-pin each other and so share a
-  branch), security alerts labelled and assigned. No auto-merge.
+  branch), security alerts labelled and assigned, plus the custom manager described under
+  "Version pins no built-in manager reads" below. No auto-merge.
 - `automerge.json` (`local>beliq-eu/.github:automerge`) — extends the base and adds
   auto-merge for patch and digest updates (and security updates) once CI passes. Only use
   this in repos that run a check on `pull_request`, otherwise updates merge with no gate.
@@ -41,6 +42,59 @@ from anywhere on github.com. The ten `tobias-dev` repos on this policy (`bq-api`
 form to keep using there. The two are interchangeable, so a repo already wired one way
 stays that way: the only thing worth checking in a new repo is that it extends this preset
 at all.
+
+## Version pins no built-in manager reads
+
+Renovate reads a version only where one of its managers looks. A version typed into a
+`run:` line is invisible to all of them, so a pin added there freezes on the day it was
+typed, and pinning without a manager trades a moving-target risk for a stale-CVE one.
+
+Seven release workflows pin npm itself so a publish cannot silently move to a newly
+released npm:
+
+```yaml
+      - name: Upgrade npm
+        # renovate: datasource=npm depName=npm
+        run: npm install -g npm@12.0.2
+```
+
+The marker comment is what `default.json`'s `customManagers` entry matches. It has to sit
+directly above the line holding the version, because the regex reads the first
+`<major>.<minor>.<patch>` on the next line: one line higher and it would read whatever
+version that line happens to carry, or nothing at all.
+
+Two things this is deliberately not:
+
+- Not the built-in `customManagers:githubActionsVersions` preset, which only reads
+  `<NAME>_VERSION:` environment variables and so does not cover a `run:` line.
+- Not needed for `astral-sh/setup-uv`'s `version:` input. Renovate's `github-actions`
+  manager already extracts that as a `uses-with` dependency. Verified 2026-09-22 against
+  `beliq-sdk-python`: lowering all three sites to `0.12.10` made Renovate propose
+  `0.12.17` with no marker comment and no custom manager. A marker there would be read
+  twice and reported as a duplicate.
+
+The file scope is `ci.yml` and `release.yml` rather than every workflow, so the manager
+does not also claim `beliq-validate-action/.github/workflows/test-action.yml`, whose pin
+that repo's own `renovate.json` manager owns. A preset's `customManagers` and a repo's are
+appended, not replaced, so an overlapping file pattern reads the same line through both.
+
+### Checking it
+
+`renovate-config-validator` proves `default.json` is well formed. It never opens a
+consuming repo, so it cannot tell a working manager from one whose file pattern matches
+nothing, which is exactly how the npm pin sat unread from 2026-09-19 to 2026-09-22. CI runs
+both:
+
+```bash
+npx --yes --package renovate renovate-config-validator --strict default.json automerge.json
+node scripts/check-custom-managers.mjs ../activepieces-beliq ../beliq-cli ...
+```
+
+The script takes repo checkouts and fails when a workflow carries a marker comment no
+manager claims or can read, when an `npm install -g npm@` line carries no marker, when a
+marker sits on an input the `github-actions` manager already reads, or when the run finds
+nothing at all to check. `.github/workflows/ci.yml` clones every `beliq-eu` repo and passes
+them in, so a marker deleted in any of them reds this repo.
 
 ## GitHub Actions policy
 
