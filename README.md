@@ -12,6 +12,16 @@ Org-wide Renovate presets. Repos reference these instead of duplicating the full
 - `automerge.json` (`local>beliq-eu/.github:automerge`) — extends the base and adds
   auto-merge for patch and digest updates (and security updates) once CI passes. Only use
   this in repos that run a check on `pull_request`, otherwise updates merge with no gate.
+  It also sets `rebaseWhen: "conflicted"`. Renovate's default, `auto`, turns into
+  `behind-base-branch` as soon as auto-merge is on, so every open update PR is rebased, and
+  its whole CI re-run, each time `main` moves. Between 2026-09-19 and 2026-09-23 one bq-engine
+  patches PR ran CI 16 times, the Differential check 18 times and the ruleset gate 17 times,
+  all billed Actions minutes. `conflicted` is safe
+  here because no consuming repo requires branches to be up to date before merging (every
+  `tobias-dev` repo on this preset has `strict_required_status_checks_policy: false`, checked
+  2026-09-24), and each repo's `main` CI tests the merged tree anyway. A repo that turns
+  strict on needs `"rebaseWhen": "auto"` in its own `renovate.json`, or its auto-merge
+  stalls on the first out-of-date PR.
 
 ## Usage
 

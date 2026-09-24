@@ -3,6 +3,7 @@
   "extends": ["local>beliq-eu/.github"],
   "automergeType": "pr",
   "automergeStrategy": "squash",
+  "rebaseWhen": "conflicted",
   "packageRules": [
     {
       "description": "Auto-merge patch and digest updates once CI passes",
