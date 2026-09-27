@@ -7,10 +7,12 @@ Org-wide Renovate presets. Repos reference these instead of duplicating the full
 - `default.json` (`local>beliq-eu/.github`) — base policy: weekly schedule, dependency
   dashboard, semantic commits, grouped patch and minor updates, one PR per major (the one
   exception being the vitest family, whose packages peer-pin each other and so share a
-  branch), security alerts labelled and assigned, plus the custom manager described under
-  "Version pins no built-in manager reads" below. No auto-merge.
+  branch), security alerts labelled and assigned, a three-day minimum release age for npm
+  and PyPI updates (see "Minimum release age" below), plus the custom manager described
+  under "Version pins no built-in manager reads" below. No auto-merge.
 - `automerge.json` (`local>beliq-eu/.github:automerge`) — extends the base and adds
-  auto-merge for patch and digest updates (and security updates) once CI passes. Only use
+  auto-merge for patch and digest updates (and security updates) once CI passes, and for
+  minor updates in the ten repositories its minor rule lists by name. Only use
   this in repos that run a check on `pull_request`, otherwise updates merge with no gate.
   It also sets `rebaseWhen: "conflicted"`. Renovate's default, `auto`, turns into
   `behind-base-branch` as soon as auto-merge is on, so every open update PR is rebased, and
@@ -52,6 +54,43 @@ from anywhere on github.com. The ten `tobias-dev` repos on this policy (`bq-api`
 form to keep using there. The two are interchangeable, so a repo already wired one way
 stays that way: the only thing worth checking in a new repo is that it extends this preset
 at all.
+
+## Minimum release age
+
+`default.json` extends Renovate's `security:minimumReleaseAgeNpm` and
+`security:minimumReleaseAgePypi`. Renovate offers no npm or PyPI version until it has been
+on the registry for three days. Both presets also set `internalChecksFilter: "strict"`, so
+no branch exists before then either: Renovate proposes the newest version that is old
+enough, and the Dependency Dashboard lists the younger ones as pending.
+
+Why this preset needs it: through `automerge.json` it merges patch and digest updates on
+green CI, and minor updates in ten repositories, with nobody looking. Before anything
+merges, the Renovate branch's own CI installs the new version with whatever that workflow
+can reach. The six `tobias-dev` yarn repositories with `file:` siblings need their lockfile
+repaired by hand, which installs it on a laptop too. The 2025 npm compromises (the chalk and
+debug hijack in September, then the Shai-Hulud worm waves) were pulled within hours to
+about a day, so three days outlasts them.
+
+Not covered, by design or by limit:
+
+- **Security updates bypass the delay**, by Renovate's design, so a vulnerability fix is
+  never held back.
+- **`lockFileMaintenance`, `pin`, `replacement`, `bump`, `rollback` and `lockfileUpdate`
+  updates get no age check.** Renovate cannot age them, so the presets exempt them and add a
+  warning to the PR body.
+- **GitHub Actions are not covered.** The presets match only the npm and PyPI datasources,
+  and a force-pushed existing tag would pass an age check anyway, because `github-tags`
+  ages a digest against the matched version's release timestamp.
+- **A dependency added by hand** (`yarn add`, `npm install <pkg>`) is not a Renovate update
+  and is not delayed.
+
+Renovate itself recommends 14 days wherever third-party dependencies auto-merge. Three days
+is the presets' own value, chosen 2026-09-27 because security fixes bypass the delay
+either way. The reasoning is in `beliq-hq/ASSURANCE-ROADMAP.md`, "AI tooling review,
+2026-09-27". Sources:
+[minimum release age](https://docs.renovatebot.com/key-concepts/minimum-release-age/),
+[security presets](https://docs.renovatebot.com/presets-security/),
+[upgrade best practices](https://docs.renovatebot.com/upgrade-best-practices/).
 
 ## Version pins no built-in manager reads
 
