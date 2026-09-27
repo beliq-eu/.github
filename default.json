@@ -3,7 +3,9 @@
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
-    ":semanticCommits"
+    ":semanticCommits",
+    "security:minimumReleaseAgeNpm",
+    "security:minimumReleaseAgePypi"
   ],
   "timezone": "UTC",
   "schedule": ["before 3am on Monday"],
