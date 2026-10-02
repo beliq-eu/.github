@@ -71,8 +71,10 @@ jobs:
       - name: Test the check
         run: node --test scripts/check-public-scrub.test.mjs
 
-      # Forks are left out: their content is upstream's, not ours.
+      # Forks are left out: their content is upstream's, not ours. This step and the next
+      # run even when the tests fail, so a red test cannot hide a finding in another repo.
       - name: Clone every repo this account owns
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -87,6 +89,7 @@ jobs:
           echo "cloned $(wc -l < own.txt) repositories"
 
       - name: No internal file, local path or private link in any of them
+        if: ${{ !cancelled() }}
         run: node scripts/check-public-scrub.mjs . own/*
 
   # Proves the workflow other repos call, on this repo, before any of them depends on it.
