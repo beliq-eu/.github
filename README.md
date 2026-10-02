@@ -1,6 +1,7 @@
 # beliq-eu shared configuration
 
-Org-wide Renovate presets. Repos reference these instead of duplicating the full policy.
+Org-wide Renovate presets, and the guard workflow every repo's CI calls. Repos reference
+these instead of duplicating the full policy.
 
 ## Presets
 
@@ -221,7 +222,53 @@ gh api /repos/<action>/contents/action.yml?ref=<sha> -H 'Accept: application/vnd
 
 A `uses:` with no 40-character SHA fails rule 1. A `runs.using` of `node20` fails rule 2.
 
-## Public scrub
+## Guard
+
+`.github/workflows/guard.yml` is a reusable workflow that every repo calls from its own CI,
+so a pull request fails before it merges:
+
+```yaml
+  guard:
+    uses: beliq-eu/.github/.github/workflows/guard.yml@<commit> # main
+```
+
+Pin it to a commit, as rule 1 above asks of every `uses:`. Each job checks this repo out at
+`job.workflow_sha`, the commit the caller pinned, and runs the scripts and config found
+there, so a repo's checks stay fixed until a Renovate digest PR moves the pin. Renovate
+reads the `# main` comment as the branch the digest follows, and `automerge.json` merges the
+digest PR once CI passes, so a change here reaches every repo within one Renovate run.
+
+Three jobs:
+
+- `content`: the public scrub and the hidden-character check, both below.
+- `workflows`: zizmor at `high` and actionlint over the repo's `.github`. zizmor gets the
+  job's token, so its online audits run too, among them the check that a pinned commit
+  belongs to the action's own repository. The `medium` findings are `artipacked`, a checkout
+  that keeps its token, and some workflows push with exactly that token, so each needs its
+  own decision before the floor can drop. actionlint runs the shellcheck the runner image
+  ships on every `run:` script.
+- `secrets`: gitleaks over every commit reachable from the one under test, with `--redact`,
+  because a public repo's CI log is public. A repo's own `.gitleaks.toml` and
+  `.gitleaksignore` apply.
+
+zizmor is pinned with every hash in `.github/guard-requirements.txt`; Renovate's
+`pip_requirements` manager moves the version and rewrites the hashes with hashin. actionlint
+and gitleaks are release downloads checked against upstream's own checksum files. Nothing
+bumps those two, so a bump is a hand edit that moves the version and the hash together.
+`.github/actionlint.yaml` ignores actionlint's errors on the `job.workflow_*` properties in
+`guard.yml` until https://github.com/rhysd/actionlint/pull/707 ships in a release.
+
+### A change here, and the repos that pin it
+
+A repo compares its `AGENTS.md` and `CLAUDE.md` with the copies at the commit it pins, and
+checks its links against that commit's `publicOwners`. So a change to either file, or a new
+public owner, reaches a repo through one pull request there that takes the new copy or link
+and moves the guard pin to the commit that made the change. Until then the repo stays green
+on its old pin, and the `content` job in this repo's CI, which checks every repo against
+the current commit, names it. A Renovate digest PR that arrives first fails on the old copy,
+and Renovate closes it once the pin has moved past it.
+
+### Public scrub
 
 Every repo this account owns is public, so planning notes, runbooks, local paths and links
 to private repos must stay out of them. `scripts/check-public-scrub.mjs` fails a repo that
@@ -240,18 +287,29 @@ tracks:
 only the file, line and rule, never the matched text: a public repo's CI log is public too,
 so the check must not publish what it guards.
 
-Where it runs:
-
-- `.github/workflows/ci.yml`, job `public-scrub`, over this repo and a fresh clone of every
-  non-fork repo of the account, on each push and pull request here and daily at 04:23 UTC.
-- `.github/workflows/public-scrub.yml`, a reusable workflow a repo calls from its own CI so a
-  pull request fails before it merges:
-
-  ```yaml
-    public-scrub:
-      uses: beliq-eu/.github/.github/workflows/public-scrub.yml@main
-  ```
-
-A new link to a public account that fails the check goes into `publicOwners` in the same
-pull request. Locally: `node scripts/check-public-scrub.mjs ../<repo> ...` and
+A new link to a public account that fails the check goes into `publicOwners`, and the repo
+that needs it moves its guard pin to that commit. Locally:
+`node scripts/check-public-scrub.mjs ../<repo> ...` and
 `node --test scripts/check-public-scrub.test.mjs`.
+
+### Hidden characters
+
+`scripts/check-hidden-text.mjs` fails a repo that tracks a text file holding a bidirectional
+control or mark (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069), a zero-width
+character (U+200B to U+200D, U+2060, and U+FEFF anywhere but the very start of a file), or a
+Unicode tag character (U+E0000 to U+E007F). A bidi override shows a reviewer code in a
+different order than the compiler reads it (CVE-2021-42574), and tag characters spell out
+text that an agent reads and a reviewer cannot see.
+
+A file that has to hold one, an official fixture for instance, goes into the repo's
+`.github/hidden-text-allow.txt`, one path per line, `#` for comments. An entry whose file no
+longer holds such a character fails too, so the list only shrinks. Skips and output follow
+the scrub: no `vendor/` or `node_modules/`, and no line text in the log. Locally:
+`node scripts/check-hidden-text.mjs ../<repo> ...` and
+`node --test scripts/check-hidden-text.test.mjs`.
+
+### Where the content checks run
+
+- In each repo's own CI, through the `content` job of `guard.yml`.
+- In `.github/workflows/ci.yml`, job `content`, over this repo and a fresh clone of every
+  non-fork repo of the account, on each push and pull request here and daily at 04:23 UTC.

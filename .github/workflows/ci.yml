@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Daily, for the public-scrub job: a repo that skips its own caller job, or pushes past
-  # it, still shows up here within a day.
+  # Daily, for the content job: a repo that skips its own guard job, or pushes past it,
+  # still shows up here within a day.
   schedule:
     - cron: '23 4 * * *'
   workflow_dispatch:
@@ -56,7 +56,10 @@ jobs:
       - name: Every marker comment is read, every npm pin carries one
         run: node scripts/check-custom-managers.mjs consumers/*
 
-  public-scrub:
+  # The content checks over every repo this account owns, read from this commit. A repo's own
+  # guard job reads them at the commit it pins, so this is also where a repo that has not yet
+  # taken a change to the checks or the shared files shows up.
+  content:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -68,8 +71,8 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Test the check
-        run: node --test scripts/check-public-scrub.test.mjs
+      - name: Test the checks
+        run: node --test scripts/check-public-scrub.test.mjs scripts/check-hidden-text.test.mjs
 
       # Forks are left out: their content is upstream's, not ours. This step and the next
       # run even when the tests fail, so a red test cannot hide a finding in another repo.
@@ -92,8 +95,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/check-public-scrub.mjs . own/*
 
-  # Proves the workflow other repos call, on this repo, before any of them depends on it.
-  public-scrub-caller:
-    uses: ./.github/workflows/public-scrub.yml
-    with:
-      source-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: No hidden bidi, zero-width or tag character in any of them
+        if: ${{ !cancelled() }}
+        run: node scripts/check-hidden-text.mjs . own/*
+
+  # Proves the workflow other repos call, on this repo, before any of them pins it.
+  guard:
+    uses: ./.github/workflows/guard.yml
