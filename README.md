@@ -11,16 +11,16 @@ Org-wide Renovate presets. Repos reference these instead of duplicating the full
   and PyPI updates (see "Minimum release age" below), plus the custom manager described
   under "Version pins no built-in manager reads" below. No auto-merge.
 - `automerge.json` (`local>beliq-eu/.github:automerge`) — extends the base and adds
-  auto-merge for patch and digest updates (and security updates) once CI passes, and for
-  minor updates in the ten repositories its minor rule lists by name. Only use
+  auto-merge for patch and digest updates (and security updates) once CI passes. Only use
   this in repos that run a check on `pull_request`, otherwise updates merge with no gate.
+  Minor updates are not auto-merged by this preset (see "Auto-merging minor updates" below).
   It also sets `rebaseWhen: "conflicted"`. Renovate's default, `auto`, turns into
   `behind-base-branch` as soon as auto-merge is on, so every open update PR is rebased, and
-  its whole CI re-run, each time `main` moves. Between 2026-09-19 and 2026-09-23 one bq-engine
-  patches PR ran CI 16 times, the Differential check 18 times and the ruleset gate 17 times,
+  its whole CI re-run, each time `main` moves. Between 2026-09-19 and 2026-09-23 one patch-update
+  PR in a consuming repo ran its CI 16 times and two further checks 18 and 17 times,
   all billed Actions minutes. `conflicted` is safe
-  here because no consuming repo requires branches to be up to date before merging (every
-  `tobias-dev` repo on this preset has `strict_required_status_checks_policy: false`, checked
+  here because no consuming repo requires branches to be up to date before merging (none
+  has `strict_required_status_checks_policy: true`, checked
   2026-09-24), and each repo's `main` CI tests the merged tree anyway. A repo that turns
   strict on needs `"rebaseWhen": "auto"` in its own `renovate.json`, or its auto-merge
   stalls on the first out-of-date PR.
@@ -45,13 +45,30 @@ Repo with a PR-triggered CI check:
 }
 ```
 
+### Auto-merging minor updates
+
+A repo that also wants minor updates merged on green adds the rule to its own
+`renovate.json`:
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["local>beliq-eu/.github:automerge"],
+  "packageRules": [{ "matchUpdateTypes": ["minor"], "automerge": true }]
+}
+```
+
+Add it only where the default branch carries a required status check set with a non-empty
+context list, so that `green` means a named check ran and passed, not that nothing ran.
+`GET /repos/{owner}/{repo}/rules/branches/{branch}` answers it. A repo with no ruleset reports
+`mergeable_state: clean` with nothing enforcing it, which an auto-merge rule must never read
+as a pass. On 2026-09-22 no beliq-eu repo had such a ruleset, so none of them carries the rule.
+
 ### Consumers in another org
 
 `local>` resolves against the platform, not the org, so both forms above reach this repo
-from anywhere on github.com. The ten `tobias-dev` repos on this policy (`bq-api`, `bq-db`,
-`bq-dashboard`, `bq-docs`, `bq-email`, `bq-engine`, `bq-infra`, `bq-landing`,
-`bq-load-tests`, `bq-types`) spell it `github>beliq-eu/.github:automerge`, and that is the
-form to keep using there. The two are interchangeable, so a repo already wired one way
+from anywhere on github.com. `github>beliq-eu/.github:automerge` is the same preset under
+another spelling. The two are interchangeable, so a repo already wired one way
 stays that way: the only thing worth checking in a new repo is that it extends this preset
 at all.
 
@@ -64,10 +81,10 @@ no branch exists before then either: Renovate proposes the newest version that i
 enough, and the Dependency Dashboard lists the younger ones as pending.
 
 Why this preset needs it: through `automerge.json` it merges patch and digest updates on
-green CI, and minor updates in ten repositories, with nobody looking. Before anything
+green CI, and minor updates in the repos that add that rule, with nobody looking. Before anything
 merges, the Renovate branch's own CI installs the new version with whatever that workflow
-can reach. The six `tobias-dev` yarn repositories with `file:` siblings need their lockfile
-repaired by hand, which installs it on a laptop too. The 2025 npm compromises (the chalk and
+can reach. Where a Renovate branch needs its lockfile repaired by hand, the new version is
+installed on a laptop too. The 2025 npm compromises (the chalk and
 debug hijack in September, then the Shai-Hulud worm waves) were pulled within hours to
 about a day, so three days outlasts them.
 
@@ -86,8 +103,7 @@ Not covered, by design or by limit:
 
 Renovate itself recommends 14 days wherever third-party dependencies auto-merge. Three days
 is the presets' own value, chosen 2026-09-27 because security fixes bypass the delay
-either way. The reasoning is in `beliq-hq/ASSURANCE-ROADMAP.md`, "AI tooling review,
-2026-09-27". Sources:
+either way. Sources:
 [minimum release age](https://docs.renovatebot.com/key-concepts/minimum-release-age/),
 [security presets](https://docs.renovatebot.com/presets-security/),
 [upgrade best practices](https://docs.renovatebot.com/upgrade-best-practices/).
@@ -161,7 +177,7 @@ A tag is mutable: whoever can move `v4` can run their code inside a workflow hol
 push credentials, sibling PATs and deploy access. `default.json` sets `pinDigests` for the
 `github-actions` manager so Renovate pins anything new and keeps the digests current.
 Scoped to that manager on purpose — a repo-wide `pinDigests` would also freeze the Docker
-`:latest` reference that `14-deploy-engine.sh` moves by hand.
+`:latest` reference that a deploy script moves by hand.
 
 ### 2. Track the latest major, and never sit on a retired Node runtime
 
@@ -190,8 +206,8 @@ runtime bump, so an unmerged stack of them is the failure mode this rule exists 
 the org sat on `actions/checkout` v7 PRs from 2026-08-17 while the estate stayed on node20.
 
 Node 24 releases of these actions require self-hosted runners at **v2.327.1 or newer**.
-Every beliq-eu job runs on `ubuntu-latest`, so this only constrains the `beliq-infra`
-self-hosted runner.
+Every beliq-eu job runs on `ubuntu-latest`, so this only constrains self-hosted runners
+in consuming repos outside this org.
 
 ### Checking the estate
 
