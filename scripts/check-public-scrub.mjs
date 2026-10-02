@@ -10,8 +10,9 @@
 //
 // Usage: node scripts/check-public-scrub.mjs <repo-dir> [<repo-dir> ...]
 // Exit codes: 0 clean, 1 findings, 2 the check itself could not run.
-// CI runs it over this repo and a fresh clone of every other one; see
-// .github/workflows/ci.yml. A repo can also call .github/workflows/public-scrub.yml.
+// This repo's CI runs it over this repo and a fresh clone of every other one
+// (.github/workflows/ci.yml), and each repo's own CI runs it through
+// .github/workflows/guard.yml.
 
 import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
