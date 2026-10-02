@@ -1,0 +1,12 @@
+{
+  "publicOwners": [
+    "beliq-eu",
+    "itplr-kosit",
+    "microsoft",
+    "PipedreamHQ",
+    "shopware",
+    "typescript-eslint",
+    "WordPress"
+  ],
+  "agentFiles": ["AGENTS.md", "CLAUDE.md"]
+}

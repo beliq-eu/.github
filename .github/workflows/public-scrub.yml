@@ -1,0 +1,44 @@
+name: Public scrub
+
+# Called from a repo's own CI so a pull request that adds an internal file, a local path
+# or a private link fails before it merges. The check and its config are read from this
+# repo's main branch, so every caller follows one copy. Caller job:
+#
+#   public-scrub:
+#     uses: beliq-eu/.github/.github/workflows/public-scrub.yml@main
+
+on:
+  workflow_call:
+    inputs:
+      # Only this repo's own CI sets it, to test a change to the check before it merges.
+      source-ref:
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  public-scrub:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Into a directory git does not track, so the check does not read itself as part of
+      # the caller.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: beliq-eu/.github
+          ref: ${{ inputs.source-ref }}
+          path: .public-scrub
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+
+      - name: No internal file, local path or private link
+        run: node .public-scrub/scripts/check-public-scrub.mjs .
