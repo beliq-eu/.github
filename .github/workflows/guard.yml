@@ -1,0 +1,125 @@
+name: Guard
+
+# Called from a repo's own CI, so a pull request fails before it merges. Caller job:
+#
+#   guard:
+#     uses: beliq-eu/.github/.github/workflows/guard.yml@<commit> # main
+#
+# Pin the commit. Each job checks this repo out at job.workflow_sha, the commit the caller
+# pinned, and runs the scripts and config found there, so a caller's checks stay fixed until
+# Renovate moves the pin with a digest PR.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  content:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Into a directory git does not track, so the checks do not read themselves as part of
+      # the caller.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .guard
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+
+      - name: No internal file, local path or private link
+        run: node .guard/scripts/check-public-scrub.mjs .
+
+      - name: No hidden bidi, zero-width or tag character
+        if: ${{ !cancelled() }}
+        run: node .guard/scripts/check-hidden-text.mjs .
+
+  workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .guard
+          persist-credentials: false
+
+      # zizmor's GitHub release carries no checksum file, so it comes from PyPI with every
+      # hash pinned; Renovate moves the version and rewrites the hashes.
+      - name: Install zizmor
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zizmor"
+          "$RUNNER_TEMP/zizmor/bin/pip" install --quiet --no-deps --require-hashes \
+            -r .guard/.github/guard-requirements.txt
+          echo "$RUNNER_TEMP/zizmor/bin" >> "$GITHUB_PATH"
+
+      # The checksum is upstream's own, from actionlint_1.7.12_checksums.txt in the same
+      # release. Nothing bumps it automatically: a bump is a hand edit that moves the hash
+      # with the version.
+      - name: Install actionlint
+        run: |
+          curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
+            --connect-timeout 10 --max-time 120 \
+            -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" \
+            | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+
+      # High only. The medium findings are `artipacked`, a checkout that keeps its token,
+      # and some workflows push with exactly that token, so each needs its own decision
+      # before the floor can drop. The token lets the online audits run, among them the
+      # check that a pinned commit really belongs to the action's own repository.
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --no-progress --min-severity high .github
+
+      # Runs the shellcheck the runner image ships on every `run:` script.
+      - name: actionlint
+        if: ${{ !cancelled() }}
+        run: '"$RUNNER_TEMP/actionlint" -color'
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The checksum is upstream's own, from gitleaks_8.30.1_checksums.txt in the same release.
+      # Nothing bumps it automatically: a bump is a hand edit that moves the hash with the
+      # version.
+      - name: Install gitleaks
+        run: |
+          curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
+            --connect-timeout 10 --max-time 120 \
+            -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" \
+            | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+
+      # Every commit reachable from the one under test, not only the new ones: a credential
+      # that reached history is burned even if a later commit removed it. A repo's own
+      # .gitleaks.toml and .gitleaksignore are read from its root. --redact keeps the match
+      # out of the log, which is public.
+      - name: No credential anywhere in the history
+        run: '"$RUNNER_TEMP/gitleaks" git --no-banner --redact --log-opts="--full-history HEAD" .'

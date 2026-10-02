@@ -1,0 +1,7 @@
+paths:
+  # actionlint 1.7.12 does not know the job.workflow_* properties GitHub added to the job
+  # context on 2026-04-23. Remove once https://github.com/rhysd/actionlint/pull/707 ships in
+  # a release and the guard's pin moves to it.
+  .github/workflows/guard.yml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'
