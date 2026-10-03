@@ -74,6 +74,14 @@ jobs:
       - name: Test the checks
         run: node --test scripts/check-public-scrub.test.mjs scripts/check-hidden-text.test.mjs
 
+      # Includes one case against the real npm, PyPI and Packagist, to prove the answers
+      # still have the shape the check reads.
+      - name: Test the new-dependency check
+        if: ${{ !cancelled() }}
+        env:
+          GUARD_LIVE_REGISTRIES: '1'
+        run: python3 scripts/check-new-dependencies.test.py
+
       # Forks are left out: their content is upstream's, not ours. This step and the next
       # run even when the tests fail, so a red test cannot hide a finding in another repo.
       - name: Clone every repo this account owns
