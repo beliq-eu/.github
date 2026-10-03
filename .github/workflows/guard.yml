@@ -8,9 +8,18 @@ name: Guard
 # Pin the commit. Each job checks this repo out at job.workflow_sha, the commit the caller
 # pinned, and runs the scripts and config found there, so a caller's checks stay fixed until
 # Renovate moves the pin with a digest PR.
+#
+# A private repository adds `with: public-scrub: false`.
 
 on:
   workflow_call:
+    inputs:
+      public-scrub:
+        description: >-
+          Run the public scrub in the content job. It enforces what may appear in a public
+          repository, so a private one sets this to false and keeps the other checks.
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -38,6 +47,7 @@ jobs:
           node-version: '22'
 
       - name: No internal file, local path or private link
+        if: ${{ inputs.public-scrub }}
         run: node .guard/scripts/check-public-scrub.mjs .
 
       - name: No hidden bidi, zero-width or tag character
@@ -123,3 +133,29 @@ jobs:
       # out of the log, which is public.
       - name: No credential anywhere in the history
         run: '"$RUNNER_TEMP/gitleaks" git --no-banner --redact --log-opts="--full-history HEAD" .'
+
+  # Only a pull request has a body to name a dependency in and a base to compare with. On any
+  # other event the job is skipped, which a required check counts as passed.
+  dependencies:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The test merge commit and its first parent, the base it is compared with.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .guard
+          persist-credentials: false
+
+      # The body comes from the event, so a re-run reads it as it was when the run started.
+      - name: Every new direct dependency exists, is old enough and has a reason
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 .guard/scripts/check-new-dependencies.py HEAD^1 HEAD

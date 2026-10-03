@@ -100,7 +100,8 @@ Not covered, by design or by limit:
   and a force-pushed existing tag would pass an age check anyway, because `github-tags`
   ages a digest against the matched version's release timestamp.
 - **A dependency added by hand** (`yarn add`, `npm install <pkg>`) is not a Renovate update
-  and is not delayed.
+  and is not delayed. The guard's `dependencies` job checks it instead, see
+  [New dependencies](#new-dependencies).
 
 Renovate itself recommends 14 days wherever third-party dependencies auto-merge. Three days
 is the presets' own value, chosen 2026-09-27 because security fixes bypass the delay
@@ -238,7 +239,10 @@ there, so a repo's checks stay fixed until a Renovate digest PR moves the pin. R
 reads the `# main` comment as the branch the digest follows, and `automerge.json` merges the
 digest PR once CI passes, so a change here reaches every repo within one Renovate run.
 
-Three jobs:
+A private repository calls it with `with: public-scrub: false`. The scrub enforces what may
+appear in a public repository; the other checks run either way.
+
+Four jobs:
 
 - `content`: the public scrub and the hidden-character check, both below.
 - `workflows`: zizmor at `high` and actionlint over the repo's `.github`. zizmor gets the
@@ -250,6 +254,8 @@ Three jobs:
 - `secrets`: gitleaks over every commit reachable from the one under test, with `--redact`,
   because a public repo's CI log is public. A repo's own `.gitleaks.toml` and
   `.gitleaksignore` apply.
+- `dependencies`: on a pull request only, the new-dependency check below. On any other
+  event it is skipped, which a required check counts as passed.
 
 zizmor is pinned with every hash in `.github/guard-requirements.txt`; Renovate's
 `pip_requirements` manager moves the version and rewrites the hashes with hashin. actionlint
@@ -307,6 +313,33 @@ longer holds such a character fails too, so the list only shrinks. Skips and out
 the scrub: no `vendor/` or `node_modules/`, and no line text in the log. Locally:
 `node scripts/check-hidden-text.mjs ../<repo> ...` and
 `node --test scripts/check-hidden-text.test.mjs`.
+
+### New dependencies
+
+`scripts/check-new-dependencies.py` compares the dependency manifests of a pull request's
+test merge commit with those of its base. A package name that no manifest of the same
+ecosystem listed before is new, and each new one must:
+
+- exist on npm, PyPI or Packagist with at least one published release;
+- be at least 30 days past its first release, or carry a
+  `Young-Dependency: <name> <reason>` line in the pull request body;
+- carry a `New-Dependency: <name> <reason>` line in the pull request body.
+
+A model can invent a package name, and a squatter can register the invented name with
+malware in it. The first rule catches a name nobody registered, the second a name
+registered last week, and the third puts the reason where a reviewer reads it.
+
+It reads `package.json`, `pyproject.toml`, `requirements*.txt`, `requirements*.in` and
+`composer.json`, and skips a requirements file that pip-compile wrote, since that pins every
+transitive package. A dependency moved between sections or manifests is not new. A local path
+is not checked; a git or URL source needs its reason line, but no registry can vouch for it.
+
+The body comes from the pull request event, so a re-run reads it as it was when the run
+started. After adding a line, push a commit or close and reopen the pull request, unless the
+calling workflow also runs on `pull_request` `edited`. Locally:
+`PR_BODY="..." python3 scripts/check-new-dependencies.py <base> <head>` in a repo, and
+`python3 scripts/check-new-dependencies.test.py` here (`GUARD_LIVE_REGISTRIES=1` adds one
+case against the real registries).
 
 ### Where the content checks run
 
