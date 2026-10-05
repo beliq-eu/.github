@@ -6,7 +6,8 @@ these instead of duplicating the full policy.
 ## Presets
 
 - `default.json` (`local>beliq-eu/.github`) — base policy: weekly schedule, dependency
-  dashboard, semantic commits, grouped patch and minor updates, one PR per major (the one
+  dashboard, semantic commits, grouped patch and minor updates (the `beliq-eu/.github` pin
+  takes a group of its own, see "Guard" below), one PR per major (the one
   exception being the vitest family, whose packages peer-pin each other and so share a
   branch), security alerts labelled and assigned, a three-day minimum release age for npm
   and PyPI updates (see "Minimum release age" below), plus the custom manager described
@@ -238,6 +239,8 @@ Pin it to a commit, as rule 1 above asks of every `uses:`. Each job checks this 
 there, so a repo's checks stay fixed until a Renovate digest PR moves the pin. Renovate
 reads the `# main` comment as the branch the digest follows, and `automerge.json` merges the
 digest PR once CI passes, so a change here reaches every repo within one Renovate run.
+`default.json` gives the pin its own branch, `renovate/beliq-eu-github-workflows`, so a
+patch elsewhere in the repo that fails its CI does not hold it back.
 
 A private repository calls it with `with: public-scrub: false`. The scrub enforces what may
 appear in a public repository; the other checks run either way.

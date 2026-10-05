@@ -22,6 +22,12 @@
       "groupName": "dependency updates (patches)"
     },
     {
+      "description": "The beliq-eu/.github pin takes a branch of its own. The pin decides which guard checks every pull request in the repo runs, so it moves once its own PR is green rather than when every patch in the repo's group is: on 2026-10-05 a failed npm patch in the same group held it back in 4 of the 14 tool repos. It stays a digest update, so `automerge.json` still merges it. It has to sit below the patches group rule to win.",
+      "matchDepNames": ["beliq-eu/.github"],
+      "groupName": "beliq-eu/.github workflows",
+      "groupSlug": "beliq-eu-github-workflows"
+    },
+    {
       "description": "Group minor updates together",
       "matchUpdateTypes": ["minor"],
       "groupName": "dependency updates (minor)"
