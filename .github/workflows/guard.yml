@@ -20,13 +20,28 @@ on:
           repository, so a private one sets this to false and keeps the other checks.
         type: boolean
         default: true
+      ubicloud:
+        description: >-
+          Run the four jobs on Ubicloud instead of a GitHub-hosted runner. The caller decides,
+          because the kill switch is its own repository variable and because the Ubicloud App
+          is granted per repository: a caller it does not cover must leave this false or its
+          jobs wait for a runner that will never come.
+
+          A boolean rather than a runner label, on purpose. `runs-on` also accepts a label
+          taken straight from `inputs.`, but a label that is not written on the line is
+          invisible to any check that classifies a workflow by reading its `runs-on` values,
+          which is how a job can be moved onto another machine without that check noticing.
+          Both labels stay literal and on the line here, so such a check can still read which
+          machines these four jobs can reach.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   content:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.ubicloud && 'ubicloud-standard-2' || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -55,7 +70,7 @@ jobs:
         run: node .guard/scripts/check-hidden-text.mjs .
 
   workflows:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.ubicloud && 'ubicloud-standard-2' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -106,7 +121,7 @@ jobs:
         run: '"$RUNNER_TEMP/actionlint" -color'
 
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.ubicloud && 'ubicloud-standard-2' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -138,7 +153,7 @@ jobs:
   # other event the job is skipped, which a required check counts as passed.
   dependencies:
     if: ${{ github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.ubicloud && 'ubicloud-standard-2' || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       # The test merge commit and its first parent, the base it is compared with.
