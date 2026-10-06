@@ -20,7 +20,7 @@ const under = (prefix, ...parts) => [prefix, '.claude', ...parts].join('/')
 // Joined too, since the public scrub reads a literal home path in this file as a leak.
 const HOME = ['', 'home', 'someone'].join('/')
 const PLAN = under('~', 'plans', 'lets-go-live-starry-cook.md')
-const SESSION = '91cbde59-faf4-42e5-bf35-df7e9389460b'
+const SESSION = '0f3c2a71-5d4e-4b8a-9c61-2e7f80a4d913'
 const PROJECT = '-home-someone-Projects-beliq'
 
 const work = mkdtempSync(join(tmpdir(), 'session-paths-test-'))
