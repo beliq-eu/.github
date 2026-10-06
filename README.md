@@ -247,7 +247,8 @@ appear in a public repository; the other checks run either way.
 
 Four jobs:
 
-- `content`: the public scrub and the hidden-character check, both below.
+- `content`: the public scrub, the hidden-character check and the session-path check, all
+  below.
 - `workflows`: zizmor at `high` and actionlint over the repo's `.github`. zizmor gets the
   job's token, so its online audits run too, among them the check that a pinned commit
   belongs to the action's own repository. The `medium` findings are `artipacked`, a checkout
@@ -276,6 +277,9 @@ and moves the guard pin to the commit that made the change. Until then the repo 
 on its old pin, and the `content` job in this repo's CI, which checks every repo against
 the current commit, names it. A Renovate digest PR that arrives first fails on the old copy,
 and Renovate closes it once the pin has moved past it.
+
+A new check reaches a repo the same way: the pull request that moves its pin runs the check
+for the first time, and goes green only once the repo passes it or lists its exceptions.
 
 ### Public scrub
 
@@ -316,6 +320,24 @@ longer holds such a character fails too, so the list only shrinks. Skips and out
 the scrub: no `vendor/` or `node_modules/`, and no line text in the log. Locally:
 `node scripts/check-hidden-text.mjs ../<repo> ...` and
 `node --test scripts/check-hidden-text.test.mjs`.
+
+### Claude Code plans and session transcripts
+
+`scripts/check-session-paths.mjs` fails a repo that tracks a text file naming a path into
+Claude Code's plan files or session transcripts: `.claude` followed by `/plans/`, or by
+`/projects/` anywhere but a project's `memory/` directory. Claude Code deletes both once they
+are older than `cleanupPeriodDays`, 30 days by default
+(https://code.claude.com/docs/en/claude-directory, "Cleaned up automatically"), and both exist
+only on the machine that wrote them. A committed path to one is a link no other reader can
+follow, and after a month the writer cannot either, so what a reader needs from such a file
+goes into the repo itself. The tilde, the home directory and a relative prefix all count.
+
+A file that has to keep such a path, a dated snapshot of what was true on its date for
+instance, goes into the repo's `.github/session-paths-allow.txt`, one path per line, `#` for
+comments. An entry whose file no longer names such a path fails too, so the list only
+shrinks. Skips and output follow the scrub. Locally:
+`node scripts/check-session-paths.mjs ../<repo> ...` and
+`node --test scripts/check-session-paths.test.mjs`.
 
 ### New dependencies
 

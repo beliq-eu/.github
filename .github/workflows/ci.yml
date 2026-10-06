@@ -72,7 +72,9 @@ jobs:
           node-version: '22'
 
       - name: Test the checks
-        run: node --test scripts/check-public-scrub.test.mjs scripts/check-hidden-text.test.mjs
+        run: >-
+          node --test scripts/check-public-scrub.test.mjs scripts/check-hidden-text.test.mjs
+          scripts/check-session-paths.test.mjs
 
       # Includes one case against the real npm, PyPI and Packagist, to prove the answers
       # still have the shape the check reads.
@@ -106,6 +108,10 @@ jobs:
       - name: No hidden bidi, zero-width or tag character in any of them
         if: ${{ !cancelled() }}
         run: node scripts/check-hidden-text.mjs . own/*
+
+      - name: No path to a Claude Code plan or session transcript in any of them
+        if: ${{ !cancelled() }}
+        run: node scripts/check-session-paths.mjs . own/*
 
   # Proves the workflow other repos call, on this repo, before any of them pins it.
   guard:
