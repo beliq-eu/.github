@@ -69,6 +69,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node .guard/scripts/check-hidden-text.mjs .
 
+      - name: No path to a Claude Code plan or session transcript
+        if: ${{ !cancelled() }}
+        run: node .guard/scripts/check-session-paths.mjs .
+
   workflows:
     runs-on: ${{ inputs.ubicloud && 'ubicloud-standard-2' || 'ubuntu-latest' }}
     timeout-minutes: 10
