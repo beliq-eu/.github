@@ -59,6 +59,12 @@
       "description": "typescript-eslint peers typescript >=4.8.4 <6.1.0 and throws `typescript-eslint does not support TS 7.0` when it loads, so a typescript 7 update cannot lint in any repo that uses it and the PR can never go green. Ten were open across both owners. Lift when typescript-eslint ships TS >=7.1 support; https://github.com/typescript-eslint/typescript-eslint/issues/10940 tracks it. A repo that does not use typescript-eslint overrides this in its own renovate.json.",
       "matchPackageNames": ["typescript"],
       "allowedVersions": "<6.1.0"
+    },
+    {
+      "description": "An npm `overrides` entry is not a direct dependency, and Renovate's default for a new version inside its range fails on it. The default is a lockfile-only update, which runs `npm install <name>@<version>`. npm reads the named package as a direct dependency and stops with `EOVERRIDE Override for <name>@<version> conflicts with direct dependency`. No lockfile is written, the PR carries a failed `renovate/artifacts` status, and Renovate cannot update the group the entry shares. From 2026-10-05 that held the patch group in beliq-sdk-node (esbuild), directus-extension-beliq (@unhead/vue) and zapier-beliq (ip-address). With `replace` Renovate proposes a version only when the range does not allow it, so the update that cannot be written is no longer attempted and an overridden package moves inside its range only when someone raises the range. A security update is the exception: Renovate applies `vulnerabilityAlerts` over every package rule, and its default strategy is the lockfile-only one. Not `bump`, which would raise the range on every release: `security:minimumReleaseAgeNpm` clears `minimumReleaseAge` for every `bump` update, so Renovate would not check the age again on the branch, npm could resolve the raised range to a version younger than three days, and `automerge.json` merges a patch update on green CI.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["overrides"],
+      "rangeStrategy": "replace"
     }
   ],
   "customManagers": [

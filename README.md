@@ -10,7 +10,8 @@ these instead of duplicating the full policy.
   takes a group of its own, see "Guard" below), one PR per major (the one
   exception being the vitest family, whose packages peer-pin each other and so share a
   branch), security alerts labelled and assigned, a three-day minimum release age for npm
-  and PyPI updates (see "Minimum release age" below), plus the custom manager described
+  and PyPI updates (see "Minimum release age" below), no update of an npm `overrides`
+  entry inside its range (see "npm `overrides`" below), plus the custom manager described
   under "Version pins no built-in manager reads" below. No auto-merge.
 - `automerge.json` (`local>beliq-eu/.github:automerge`) — extends the base and adds
   auto-merge for patch and digest updates (and security updates) once CI passes. Only use
@@ -110,6 +111,71 @@ either way. Sources:
 [minimum release age](https://docs.renovatebot.com/key-concepts/minimum-release-age/),
 [security presets](https://docs.renovatebot.com/presets-security/),
 [upgrade best practices](https://docs.renovatebot.com/upgrade-best-practices/).
+
+## npm `overrides`
+
+`default.json` sets `rangeStrategy: "replace"` for npm's `overrides` dependency type. Renovate
+then proposes a new version of an overridden package only when the range does not allow it,
+which for a caret range from 1.0.0 up is a new major. A version inside the range is not
+proposed.
+
+Renovate's default cannot write that update. For a version the range already allows, it
+leaves `package.json` alone and moves the lockfile with `npm install <name>@<version>`.
+Naming the package makes it a direct dependency for that command, and when it is listed under
+`overrides` only, npm stops:
+
+```
+npm error code EOVERRIDE
+npm error Override for ip-address@10.7.3 conflicts with direct dependency
+```
+
+Renovate then writes no lockfile, sets a failed `renovate/artifacts` status on the PR and
+leaves the branch as it is, so every other update in the same group waits with it. From
+2026-10-05 that held the patch group in beliq-sdk-node (esbuild), directus-extension-beliq
+(@unhead/vue) and zapier-beliq (ip-address). On 2026-10-08 those three were the only
+`beliq-eu` repos with an `overrides` block.
+
+What the rule costs: an overridden package moves inside its range only when someone raises
+the range by hand. That is what every other transitive package gets: the presets do not
+turn on `lockFileMaintenance`, so Renovate moves none of them.
+
+Not `bump`, which would raise the range on every release and regenerate the lockfile with an
+install that names no package. `security:minimumReleaseAgeNpm` clears `minimumReleaseAge` for
+every `bump` update (see "Minimum release age" above). Renovate would still propose a version
+that is three days old, but it would not check the age again on the branch, and npm gets its
+`--before` cutoff only when the first update in the group carries an age. Without the cutoff
+npm resolves the raised range to the newest version that fits it, whatever its age, and
+`automerge.json` merges a patch update on green CI.
+
+Setting the age again on the same rule was tried in the dry run: the same updates are
+planned, each with a release timestamp. It was not taken, because only a hosted run shows
+whether the age is then applied, and the three days would be typed in two places.
+
+Not covered: a security update. Renovate applies its `vulnerabilityAlerts` settings over
+every package rule, and their default strategy is the lockfile-only one, so this rule does
+not reach one. A fix that the range already allows may fail the same way and then needs the
+range raised by hand. Read in Renovate's source, not tried against an alert.
+
+### Checking it
+
+`renovate-config-validator` accepts a rule that matches nothing. What shows that this one
+matches is a dry run in a consuming repo, once without the rule and once with it:
+
+```bash
+LOG_LEVEL=debug npx --yes -p node@24 -p renovate renovate --platform=local --enabled-managers=npm
+```
+
+`--platform=local` reads the working tree and writes nothing. It cannot resolve a `local>`
+preset, so for the run the repo's `renovate.json` is replaced by a copy of `default.json`.
+In the log's `packageFiles with updates` block, an `overrides` entry with a new version
+inside its range carries an update with `"isLockfileUpdate": true` without the rule, and no
+update for that version with it. Run on 2026-10-08 with Renovate 44.145.1 in
+beliq-sdk-node, directus-extension-beliq and zapier-beliq.
+
+The dry run stops before the lockfile step, so it does not show the `EOVERRIDE`. That was
+reproduced with npm 10.9.8 in the same three repos:
+`npm install --package-lock-only --ignore-scripts --no-audit <name>@<version>` ends in the
+error above and changes no file.
 
 ## Version pins no built-in manager reads
 
