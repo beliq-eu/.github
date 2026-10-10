@@ -1,0 +1,11 @@
+name: case 9
+on: workflow_dispatch
+permissions: {}
+jobs:
+  case:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000
+    steps:
+      - run: 'true'

@@ -1,0 +1,11 @@
+name: case 13
+on: workflow_dispatch
+permissions: {}
+jobs:
+  case:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:8-alpine
+    steps:
+      - run: 'true'

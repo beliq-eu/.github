@@ -1,0 +1,8 @@
+name: case 5
+on: workflow_dispatch
+permissions: {}
+jobs:
+  case:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: pypa/gh-action-pypi-publish@8b2f23418f024937cf97f77534a597947105e772 # release/v1

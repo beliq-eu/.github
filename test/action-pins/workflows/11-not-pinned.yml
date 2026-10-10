@@ -1,0 +1,8 @@
+name: case 11
+on: workflow_dispatch
+permissions: {}
+jobs:
+  case:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/cache@v6
