@@ -1,0 +1,6 @@
+name: case 4
+on: workflow_dispatch
+permissions: {}
+jobs:
+  guard:
+    uses: beliq-eu/.github/.github/workflows/guard.yml@e9db7765063f11c1d61258df8bb2119c5d92c961 # main

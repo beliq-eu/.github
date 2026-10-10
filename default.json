@@ -5,15 +5,17 @@
     ":dependencyDashboard",
     ":semanticCommits",
     "security:minimumReleaseAgeNpm",
-    "security:minimumReleaseAgePypi"
+    "security:minimumReleaseAgePypi",
+    "helpers:pinGitHubActionDigestsToSemver"
   ],
   "timezone": "UTC",
   "schedule": ["before 3am on Monday"],
   "dependencyDashboardLabels": ["stays-open", "next:agent"],
   "packageRules": [
     {
-      "description": "Pin every GitHub Action to a full commit SHA. A tag is mutable: whoever can move `v4` can run their code inside a workflow holding GHCR push credentials, sibling PATs and deploy access. Scoped to github-actions on purpose -- pinning Docker tags too would freeze the `:latest` the engine deploy moves by hand.",
+      "description": "Pin every GitHub Action to a full commit SHA. A tag is mutable: whoever can move `v4` can run their code inside a workflow holding GHCR push credentials, sibling PATs and deploy access. Scoped to github-actions on purpose: pinning Docker tags too would freeze the `:latest` the engine deploy moves by hand. Scoped to five dep types inside that manager: actions, reusable workflows, `docker://` steps, and the images under `container:` and `services:`. The manager also reads a version typed into a `with:` input (dep type `uses-with`), and without the dep types Renovate proposes a commit digest for `astral-sh/setup-uv`'s `version:` input, which takes a version of uv. `helpers:pinGitHubActionDigestsToSemver` in `extends` sets the same for actions and reusable workflows, so for those two this rule repeats it; the three image types are pinned by this rule alone.",
       "matchManagers": ["github-actions"],
+      "matchDepTypes": ["action", "workflow", "container", "service", "docker"],
       "pinDigests": true
     },
     {
@@ -65,6 +67,19 @@
       "matchManagers": ["npm"],
       "matchDepTypes": ["overrides"],
       "rangeStrategy": "replace"
+    },
+    {
+      "description": "No digest update for an action or a reusable workflow. Under `helpers:pinGitHubActionDigestsToSemver` in `extends` the trailing comment holds the full version (`# v7.0.1`), and a digest update then means one thing: the tag points at another commit than the pinned one. A release tag is not meant to move, and following it would undo the pin. Under a major-only comment (`# v7`), which stays until Renovate rewrites it, a digest update is the major tag moving on to a new release; that release is offered as a version update all the same. Such an update is also not held by the release age in the next rule, because Renovate ages it against the date the tag was first released, and `automerge.json` merges a digest update on green CI. A new release still arrives as a patch, minor or major update, which moves the commit and the comment together. The first pin of a newly added action is a `pinDigest` update and still happens. The `beliq-eu/.github` pin is left out by name: it follows the `main` branch on purpose, and its digest update is how a change to the guard workflow reaches a repo. Matched by dep type and not by manager, so the Docker image of a `services:` or `container:` entry keeps its digest updates.",
+      "matchDepTypes": ["action", "workflow"],
+      "matchDepNames": ["!beliq-eu/.github"],
+      "matchUpdateTypes": ["digest"],
+      "enabled": false
+    },
+    {
+      "description": "A release of an action or a reusable workflow is offered once it is three days old, the length `security:minimumReleaseAgeNpm` and `security:minimumReleaseAgePypi` in `extends` set for npm and PyPI. Those presets match their own datasources only, so Actions need this rule. The `beliq-eu/.github` pin is left out by name: it follows a branch, a branch has no release date, and Renovate holds an update it cannot date (`minimumReleaseAgeBehaviour` defaults to `timestamp-required`). Matched by dep type and not by manager for the same reason: the Docker digest of a `services:` image has no date either and would never be offered. A version in a `with:` input (dep type `uses-with`) is outside this rule.",
+      "matchDepTypes": ["action", "workflow"],
+      "matchDepNames": ["!beliq-eu/.github"],
+      "minimumReleaseAge": "3 days"
     }
   ],
   "customManagers": [

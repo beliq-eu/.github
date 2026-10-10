@@ -9,14 +9,19 @@ these instead of duplicating the full policy.
   dashboard, semantic commits, grouped patch and minor updates (the `beliq-eu/.github` pin
   takes a group of its own, see "Guard" below), one PR per major (the one
   exception being the vitest family, whose packages peer-pin each other and so share a
-  branch), security alerts labelled and assigned, a three-day minimum release age for npm
-  and PyPI updates (see "Minimum release age" below), no update of an npm `overrides`
+  branch), security alerts labelled and assigned, a three-day minimum release age for npm,
+  PyPI and GitHub Actions updates (see "Minimum release age" below), GitHub Actions pinned
+  to a commit that Renovate moves only with a new release, the `beliq-eu/.github` pin apart
+  (see "GitHub Actions policy" below), no update of an npm `overrides`
   entry inside its range (see "npm `overrides`" below), plus the custom manager described
   under "Version pins no built-in manager reads" below. No auto-merge.
 - `automerge.json` (`local>beliq-eu/.github:automerge`) — extends the base and adds
   auto-merge for patch and digest updates (and security updates) once CI passes. Only use
   this in repos that run a check on `pull_request`, otherwise updates merge with no gate.
   Minor updates are not auto-merged by this preset (see "Auto-merging minor updates" below).
+  For a GitHub Action that leaves its patch releases: the base preset turns digest updates
+  off for every action but the `beliq-eu/.github` pin, and a minor release of an action
+  waits for a hand merge like any other minor update.
   It also sets `rebaseWhen: "conflicted"`. Renovate's default, `auto`, turns into
   `behind-base-branch` as soon as auto-merge is on, so every open update PR is rebased, and
   its whole CI re-run, each time `main` moves. Between 2026-09-19 and 2026-09-23 one patch-update
@@ -83,8 +88,19 @@ on the registry for three days. Both presets also set `internalChecksFilter: "st
 no branch exists before then either: Renovate proposes the newest version that is old
 enough, and the Dependency Dashboard lists the younger ones as pending.
 
+GitHub Actions get the same three days from a rule in `default.json` itself, because
+Renovate's presets match their own datasources only. The rule covers every `uses:` line
+that names an action or a reusable workflow, all but the `beliq-eu/.github` pin. An action
+has no registry date. Renovate 44.145.1 takes the date of the tag, which is the tagger's
+date on an annotated tag and the commit's date on a lightweight one, or the publish date of
+the GitHub release of that name when that is later. The younger release is pending here
+too: a dry run on 2026-10-10 offered `astral-sh/setup-uv` v10.2.0 while v10.3.0,
+published the day before, waited.
+
 Why this preset needs it: through `automerge.json` it merges patch and digest updates on
-green CI, and minor updates in the repos that add that rule, with nobody looking. Before anything
+green CI (for a GitHub Action: patch releases, and the digest updates of the
+`beliq-eu/.github` pin), and minor updates in the repos that add that rule, with nobody
+looking. Before anything
 merges, the Renovate branch's own CI installs the new version with whatever that workflow
 can reach. Where a Renovate branch needs its lockfile repaired by hand, the new version is
 installed on a laptop too. The 2025 npm compromises (the chalk and
@@ -98,12 +114,12 @@ Not covered, by design or by limit:
 - **`lockFileMaintenance`, `pin`, `replacement`, `bump`, `rollback` and `lockfileUpdate`
   updates get no age check.** Renovate cannot age them, so the presets exempt them and add a
   warning to the PR body.
-- **GitHub Actions are not covered.** The presets match only the npm and PyPI datasources,
-  and a force-pushed existing tag would pass an age check anyway, because `github-tags`
-  ages a digest against the matched version's release timestamp.
 - **A dependency added by hand** (`yarn add`, `npm install <pkg>`) is not a Renovate update
   and is not delayed. The guard's `dependencies` job checks it instead, see
-  [New dependencies](#new-dependencies).
+  [New dependencies](#new-dependencies). That job reads package manifests, so it does not
+  see an action added by hand.
+- **For GitHub Actions** the list is longer: see
+  [What the Renovate rules do not cover](#what-the-renovate-rules-do-not-cover).
 
 Renovate itself recommends 14 days wherever third-party dependencies auto-merge. Three days
 is the presets' own value, chosen 2026-09-27 because security fixes bypass the delay
@@ -236,17 +252,46 @@ Two rules. They apply to `.github/workflows/**` **and** to any `action.yml` this
 publishes, because a `uses:` inside a published composite action runs in the caller's CI,
 not ours.
 
-### 1. Pin to a full commit SHA, keep the tag as a trailing comment
+### 1. Pin to a full commit SHA, keep the full version as a trailing comment
 
 ```yaml
-- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 ```
 
 A tag is mutable: whoever can move `v4` can run their code inside a workflow holding GHCR
 push credentials, sibling PATs and deploy access. `default.json` sets `pinDigests` for the
-`github-actions` manager so Renovate pins anything new and keeps the digests current.
-Scoped to that manager on purpose — a repo-wide `pinDigests` would also freeze the Docker
-`:latest` reference that a deploy script moves by hand.
+`github-actions` manager, so Renovate pins anything new.
+Scoped to that manager on purpose: a repo-wide `pinDigests` would also freeze the Docker
+`:latest` reference that a deploy script moves by hand. Inside the manager it covers
+actions, reusable workflows, `docker://` steps and the images under `container:` and
+`services:`. It leaves out a version typed into a `with:` input, which the manager reads too: without that scope
+Renovate proposes a commit digest for `astral-sh/setup-uv`'s `version:` input, which takes
+a version of uv.
+
+The comment holds the full version because Renovate reads it as the version the line is
+pinned to. `default.json` extends `helpers:pinGitHubActionDigestsToSemver`. Under it a new
+release arrives as a patch, minor or major update that moves the commit and the comment
+together, and waits until it is three days old (see "Minimum release age" above). A
+major-only comment still works: Renovate reads `# v7` as 7.0.0 and writes the full version
+the next time it updates the line.
+
+Renovate moves a pin in no other way: `default.json` turns `digest` updates off for
+actions and reusable workflows. A digest update keeps the comment and moves the commit to
+wherever the tag points now. Under a `# v7` comment that was how a new release in the
+major arrived once its maintainers had moved the `v7` tag, and `automerge.json` merged it
+on green CI with no age check. Under a full version it can only mean that a release tag
+was moved to another commit, and the release age does not hold that case either.
+Renovate's docs: "If an existing tag is force-pushed to new commits, the digest update
+ages against the original release date, so it may pass Minimum Release Age immediately"
+([digest updates](https://docs.renovatebot.com/key-concepts/minimum-release-age/#digest-updates)).
+
+One of them keeps its digest update: the guard workflow's pin, which follows the `main`
+branch of this repo on purpose (see "Guard" below). The digest rule and the age rule both leave it
+out by name.
+
+What changes for a repo that extends `automerge.json`: a patch release of an action still
+merges itself. A minor release waits in the `dependency updates (minor)` pull request for
+a hand merge, unless the repo auto-merges minor updates.
 
 ### 2. Track the latest major, and never sit on a retired Node runtime
 
@@ -259,15 +304,15 @@ is what disappears.
 
 So the convention is the latest major of every `actions/*` action, which is also the way to
 stay on a current runtime without tracking runtime deprecations per action. Baseline as of
-2026-08-31, all `node24`:
+2026-08-31, all `node24`, with the version each SHA is the release tag of:
 
-| action | major | SHA |
+| action | version | SHA |
 | --- | --- | --- |
-| `actions/checkout` | v7 | `3d3c42e5aac5ba805825da76410c181273ba90b1` |
-| `actions/setup-node` | v7 | `820762786026740c76f36085b0efc47a31fe5020` |
-| `actions/setup-python` | v7 | `5fda3b95a4ea91299a34e894583c3862153e4b97` |
-| `actions/upload-artifact` | v7 | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` |
-| `actions/cache` | v6 | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` |
+| `actions/checkout` | v7.0.1 | `3d3c42e5aac5ba805825da76410c181273ba90b1` |
+| `actions/setup-node` | v7.0.0 | `820762786026740c76f36085b0efc47a31fe5020` |
+| `actions/setup-python` | v7.0.0 | `5fda3b95a4ea91299a34e894583c3862153e4b97` |
+| `actions/upload-artifact` | v7.0.1 | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` |
+| `actions/cache` | v6.1.0 | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` |
 
 Renovate opens one PR per major (`groupName: null` for majors, deliberately), so majors
 arrive as separate PRs and **need merging by hand**. They are the ones that carry the
@@ -290,6 +335,103 @@ gh api /repos/<action>/contents/action.yml?ref=<sha> -H 'Accept: application/vnd
 
 A `uses:` with no 40-character SHA fails rule 1. A `runs.using` of `node20` fails rule 2.
 
+### What the Renovate rules do not cover
+
+- **The first pin of a newly added action is not aged.** An action added by hand as
+  `actions/cache@v6` gets a `pinDigest` update, which pins the commit the tag points at on
+  that day. The guard's `dependencies` job reads package manifests and does not see a
+  `uses:` line.
+- **A version in a `with:` input is not aged.** `node-version`, `python-version` and
+  `astral-sh/setup-uv`'s `version:` are dependencies of another type (`uses-with`), and the
+  age rule matches actions and reusable workflows only. A dry run on 2026-10-10 offered uv
+  0.13.0 within a day of its release.
+- **A `# v7` comment stays while the action's newest release is `v7.0.0`.** Renovate reads
+  both as one version and proposes nothing. The pin holds all the same, because the digest
+  rule does not read the comment, and the full version arrives with the action's next
+  release. `actions/setup-python` was in that state on 2026-10-10.
+- **A moved tag is not followed, and nothing reports it.** The pinned commit stays, which
+  is the point. No check here says that a tag no longer points at the commit pinned under
+  its name.
+- **A pin that follows a branch gets no update at all**, the guard pin apart. A comment
+  such as `# release/v1` gives Renovate a branch and no version, so the only update it can
+  propose is the digest update that is off. Pin a release tag, with its full version in
+  the comment.
+- **A security update for an action was not tried.** Renovate's docs say that security
+  updates bypass the release age. No alert for an action existed to try it on.
+
+### Checking the Renovate rules
+
+`renovate-config-validator` accepts a rule that matches nothing, and these rules fail
+silently. Scoped or ordered another way by a later edit, they let digest updates for
+actions come back and merge themselves, or they stop the guard pin in every repo. So the
+`presets` job of `.github/workflows/ci.yml` runs Renovate itself and reads what it would
+open:
+
+```bash
+node scripts/check-action-pin-rules.mjs build /tmp/action-pins
+(cd /tmp/action-pins && LOG_LEVEL=trace LOG_FORMAT=json GITHUB_COM_TOKEN=<token> \
+  npx --yes --package renovate renovate --platform=local --enabled-managers=github-actions) \
+  > /tmp/renovate.ndjson
+node scripts/check-action-pin-rules.mjs judge /tmp/renovate.ndjson
+```
+
+`build` copies the 14 workflows of `test/action-pins/workflows` into `.github/workflows`
+of a new directory and writes a `renovate.json` there that holds `default.json` with
+`automerge.json` applied on top. `--platform=local` reads the directory, writes nothing and
+cannot resolve a `local>` preset. The fixture is kept outside `.github/` so that Renovate
+does not read it as workflows of this repo and update the planted lines.
+
+`judge` exits 0 only when all three hold. It exits 1 when one does not, and 2 when it
+could not read the run:
+
+1. The lookup offers a `digest` update for case 1, a full-version comment on a commit that
+   is not the tag's. Without it the second read would pass on a run that saw no digest
+   update at all.
+2. No branch holds a `digest` update of an action or a reusable workflow, the guard pin
+   apart.
+3. A branch holds the guard pin's `digest` update, not pending, with auto-merge on.
+
+It reads two records of the log. `packageFiles with updates` is the lookup, and it lists an
+update that a rule turns off like any other, so the lookup alone cannot show that a rule
+works. `branches`, written at trace level only, is what Renovate would open.
+
+`judge` also prints the message of every warning and error Renovate logged. Renovate
+exits 1 when it logged an error, and its output went to the file.
+
+Three things that make the run say nothing, each of which `judge` turns into a failure:
+
+- **Node 22.** Renovate 44 needs Node 24. Under Node 22 npx installs the newest Renovate
+  that runs there, 42.99.0 on 2026-10-10. That version rejects `default.json` and stops
+  before the lookup.
+- **No token.** Without `GITHUB_COM_TOKEN` Renovate cannot look up the tags of an action
+  and warns `GitHub token is required for some dependencies`. Any token that reads public
+  repos will do.
+- **A directory inside a git checkout.** Renovate then lists only the files git tracks
+  there.
+
+Not checked: the release age. That needs a release from the three days before the run,
+which no fixture can hold. Cases 2, 3 and 8 show it when read by hand, and their result
+moves as upstream releases age. Not checked either: which dep types the pin rule covers.
+Cases 8, 11, 13 and 14 show that when read by hand. What Renovate 44.145.1 did with each
+case on 2026-10-10:
+
+| Case | The line | What it stands for | Result |
+| --- | --- | --- | --- |
+| 1 | `actions/checkout@<commit of v7.0.0> # v7.0.1` | a release tag that does not point at the pinned commit | the `digest` update is looked up and is in no branch |
+| 2 | `actions/setup-node@<commit of v7.0.0> # v7` | a major-only comment whose major tag moved on, to v7.1.0 | no `digest` update in a branch; `minor` v7.1.0 pending, 2.6 days old |
+| 3 | `actions/setup-node@<commit of v7.0.0> # v7.0.0` | a full version with a newer release | `minor` v7.1.0 pending |
+| 4 | `beliq-eu/.github/.github/workflows/guard.yml@<an older commit> # main` | the guard pin, behind `main` | `digest`, in its own branch, auto-merge on |
+| 5 | `pypa/gh-action-pypi-publish@<an older commit of the branch> # release/v1` | a third-party pin that follows a branch | no update in a branch |
+| 6 | `pypa/gh-action-pypi-publish@<commit of v1.14.1> # v1.14.1` | a full version, one release behind | `patch` v1.14.2, patches group, auto-merge on |
+| 7 | `actions/setup-python@<commit of v7.0.0> # v7` | a major-only comment on a `7.0.0` release | nothing |
+| 8 | `astral-sh/setup-uv@<commit of v10.1.0> # v10.1.0`, `with: version: "0.12.23"` | a release from the day before, and a `with:` version input | `minor` v10.2.0, with v10.3.0 pending; uv `minor` 0.13.0 with no age and no pin |
+| 9 | a service image `postgres:18-alpine@sha256:<64 zeros>` | a Docker digest inside a workflow | `digest`, patches group, auto-merge on |
+| 10 | `actions/checkout@<commit of v7.0.1> # v7` | a major-only comment on the current commit | `patch`: the comment becomes `# v7.0.1` on the same commit, patches group, auto-merge on |
+| 11 | `actions/cache@v6` | an action added by hand, not pinned yet | `pinDigest`, and `minor` v6.1.0 |
+| 12 | `pypa/gh-action-pypi-publish@<commit of v1.14.2> # v1.14.2` | a full version, current | nothing |
+| 13 | a service image `redis:8-alpine` | a Docker image not pinned yet | `pinDigest` |
+| 14 | a step `uses: docker://alpine:3.20` | a `docker://` step not pinned yet | `pinDigest`, and `minor` 3.24 |
+
 ## Guard
 
 `.github/workflows/guard.yml` is a reusable workflow that every repo calls from its own CI,
@@ -306,7 +448,9 @@ there, so a repo's checks stay fixed until a Renovate digest PR moves the pin. R
 reads the `# main` comment as the branch the digest follows, and `automerge.json` merges the
 digest PR once CI passes, so a change here reaches every repo within one Renovate run.
 `default.json` gives the pin its own branch, `renovate/beliq-eu-github-workflows`, so a
-patch elsewhere in the repo that fails its CI does not hold it back.
+patch elsewhere in the repo that fails its CI does not hold it back. It is the one action or
+reusable workflow whose digest update `default.json` leaves on and whose update it does not
+age: a branch has no release date, and Renovate holds an update it cannot date.
 
 A private repository calls it with `with: public-scrub: false`. The scrub enforces what may
 appear in a public repository; the other checks run either way.
