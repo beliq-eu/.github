@@ -453,9 +453,10 @@ reusable workflow whose digest update `default.json` leaves on and whose update 
 age: a branch has no release date, and Renovate holds an update it cannot date.
 
 A private repository calls it with `with: public-scrub: false`. The scrub enforces what may
-appear in a public repository; the other checks run either way.
+appear in a public repository; the other checks run either way. A repository turns the
+`no-test` job on by naming its source directories, for example `with: source-paths: src/`.
 
-Four jobs:
+Five jobs:
 
 - `content`: the public scrub, the hidden-character check and the session-path check, all
   below.
@@ -470,6 +471,8 @@ Four jobs:
   `.gitleaksignore` apply.
 - `dependencies`: on a pull request only, the new-dependency check below. On any other
   event it is skipped, which a required check counts as passed.
+- `no-test`: on a pull request by a person, in a repository that sets `source-paths`, the
+  check on source changes without a test below. Otherwise it is skipped.
 
 zizmor is pinned with every hash in `.github/guard-requirements.txt`; Renovate's
 `pip_requirements` manager moves the version and rewrites the hashes with hashin. actionlint
@@ -575,6 +578,32 @@ calling workflow also runs on `pull_request` `edited`. Locally:
 `PR_BODY="..." python3 scripts/check-new-dependencies.py <base> <head>` in a repo, and
 `python3 scripts/check-new-dependencies.test.py` here (`GUARD_LIVE_REGISTRIES=1` adds one
 case against the real registries).
+
+### Source changes without a test
+
+`scripts/check-untested-source.py` reads the files a pull request adds or changes, compared
+with its base. When one of them is source code and none of them is a test, the pull request
+body needs a `No-Test: <reason>` line.
+
+A bug that comes back is the costly kind, and a test that fails without the fix is what keeps
+it out. No check can tell a bug fix from any other change, so this one asks every untested
+source change for its reason, where a reviewer reads it.
+
+- Source: a file under one of the caller's `source-paths` with a code extension (`.py`,
+  `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.php`) that is not a test.
+- Test: any file in the repository with a `test`, `tests`, `e2e` or `__tests__` directory on
+  its path, or named `*.test.*`, `*.spec.*`, `test_*.py` or `*_test.py`. A new fixture under a
+  test directory counts; Markdown there does not.
+- A deleted file needs no test. A rename reads as a deletion and an addition, so a moved
+  source file needs a test or the line. `vendor/` and `node_modules/` are skipped.
+- A pull request opened by a bot is skipped.
+- A `No-Test:` line inside an HTML comment or a fenced code block does not count, so a pull
+  request template can show the line without meeting it.
+
+The body is read as with the new-dependency check: a re-run reads it as it was when the run
+started, unless the calling workflow also runs on `pull_request` `edited`. Locally:
+`PR_BODY="..." python3 scripts/check-untested-source.py <base> <head> src/` in a repo, and
+`python3 scripts/check-untested-source.test.py` here.
 
 ### Where the content checks run
 

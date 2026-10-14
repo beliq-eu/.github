@@ -117,6 +117,10 @@ jobs:
           GUARD_LIVE_REGISTRIES: '1'
         run: python3 scripts/check-new-dependencies.test.py
 
+      - name: Test the no-test check
+        if: ${{ !cancelled() }}
+        run: python3 scripts/check-untested-source.test.py
+
       # Forks are left out: their content is upstream's, not ours. This step and the next
       # run even when the tests fail, so a red test cannot hide a finding in another repo.
       - name: Clone every repo this account owns
