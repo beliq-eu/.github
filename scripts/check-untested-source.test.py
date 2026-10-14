@@ -108,6 +108,31 @@ class UntestedSourceCheck(unittest.TestCase):
                                     body='<!-- No-Test: from the template -->\nSee No-Test: below')
         self.assertEqual(code, 1)
 
+    def test_a_line_inside_a_multiline_comment_or_a_code_fence_does_not_count(self):
+        head = {'src/route.ts': 'export const a = 2;\n'}
+        for body in ('<!--\nNo-Test: <reason>\n-->\n', 'Example:\n```\nNo-Test: a comment only\n```\n',
+                     '<!-- the template, never closed\nNo-Test: x'):
+            code, _, _ = self.run_check(head, body=body)
+            self.assertEqual(code, 1, body)
+        code, _, err = self.run_check(head, body='<!-- template -->\n```\nexample\n```\nNo-Test: log text only')
+        self.assertEqual(code, 0, err)
+
+    def test_markdown_under_a_test_directory_is_not_a_test(self):
+        code, _, err = self.run_check({'src/route.ts': 'export const a = 2;\n', 'test/README.md': 'How to run.\n'})
+        self.assertEqual(code, 1)
+        self.assertIn('  src/route.ts\n', err)
+
+    def test_a_prefix_is_read_as_git_prints_paths(self):
+        code, _, err = self.run_check({'src/route.ts': 'export const a = 2;\n'}, prefixes=('./src',))
+        self.assertEqual(code, 1)
+        self.assertIn('  src/route.ts\n', err)
+
+    def test_a_prefix_outside_the_repository_makes_the_check_exit_2(self):
+        for bad in ('.', '/', '../src'):
+            code, _, err = self.run_check({'src/route.ts': 'export const a = 2;\n'}, prefixes=(bad,))
+            self.assertEqual(code, 2, bad)
+            self.assertIn('is not a directory inside the repository', err)
+
     def test_a_test_file_under_a_source_prefix_is_a_test_not_source(self):
         code, out, err = self.run_check({'src/route.test.ts': 'test("a", () => {});\n'})
         self.assertEqual(code, 0, err)

@@ -593,10 +593,12 @@ source change for its reason, where a reviewer reads it.
   `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.php`) that is not a test.
 - Test: any file in the repository with a `test`, `tests`, `e2e` or `__tests__` directory on
   its path, or named `*.test.*`, `*.spec.*`, `test_*.py` or `*_test.py`. A new fixture under a
-  test directory counts.
+  test directory counts; Markdown there does not.
 - A deleted file needs no test. A rename reads as a deletion and an addition, so a moved
   source file needs a test or the line. `vendor/` and `node_modules/` are skipped.
 - A pull request opened by a bot is skipped.
+- A `No-Test:` line inside an HTML comment or a fenced code block does not count, so a pull
+  request template can show the line without meeting it.
 
 The body is read as with the new-dependency check: a re-run reads it as it was when the run
 started, unless the calling workflow also runs on `pull_request` `edited`. Locally:

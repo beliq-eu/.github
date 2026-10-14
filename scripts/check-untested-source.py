@@ -8,9 +8,10 @@ question: a pull request that adds or modifies source and adds or modifies no te
 
 A source file sits under one of the path prefixes given, has one of CODE_EXTENSIONS, and is
 not itself a test. A test file is any file in the repo with a directory named in TEST_DIRS on
-its path, or a name TEST_NAME matches; fixtures under a test directory count. A deleted file
-needs no test, so only added and modified files are read. A rename reads as a deletion and an
-addition.
+its path, or a name TEST_NAME matches; fixtures under a test directory count, Markdown there
+does not. A deleted file needs no test, so only added and modified files are read. A rename
+reads as a deletion and an addition. A No-Test line inside an HTML comment or a fenced code
+block does not count, so a pull request template can show the line without meeting it.
 
 Usage: check-untested-source.py <base> <head> <path prefix>...
 The pull request body comes from the PR_BODY environment variable.
@@ -19,6 +20,7 @@ The output names changed files, which the pull request already shows.
 """
 
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -31,6 +33,8 @@ TEST_NAME = re.compile(r'(\.(test|spec)\.[^.]+$|^test_.*\.py$|_test\.py$)')
 SKIP_DIR = re.compile(r'(^|/)(vendor|node_modules)/')
 
 TRAILER = re.compile(r'^[ \t]*(?:[-*][ \t]+)?no-test:(.*)$', re.I | re.M)
+# An HTML comment, or a fenced code block, each to its end or to the end of the body.
+HIDDEN = re.compile(r'<!--.*?(?:-->|\Z)|^[ \t]*(```|~~~).*?(?:^[ \t]*\1|\Z)', re.S | re.M)
 
 
 class CheckError(Exception):
@@ -43,12 +47,15 @@ def changed_files(base, head):
         capture_output=True)
     if result.returncode != 0:
         raise CheckError(f"git diff {base} {head}: {result.stderr.decode(errors='replace').strip()}")
-    return [p for p in result.stdout.decode().split('\0') if p and not SKIP_DIR.search(p)]
+    names = result.stdout.decode(errors='replace').split('\0')
+    return [p for p in names if p and not SKIP_DIR.search(p)]
 
 
 def is_test(path):
     *dirs, name = path.split('/')
-    return any(d in TEST_DIRS for d in dirs) or bool(TEST_NAME.search(name))
+    if TEST_NAME.search(name):
+        return True
+    return any(d in TEST_DIRS for d in dirs) and not name.lower().endswith('.md')
 
 
 def is_source(path, prefixes):
@@ -57,14 +64,23 @@ def is_source(path, prefixes):
 
 def reasons(body):
     """The text after each No-Test: line in the body, stripped."""
-    return [m.group(1).strip().strip('`').strip() for m in TRAILER.finditer(body or '')]
+    visible = HIDDEN.sub('', body or '')
+    return [m.group(1).strip().strip('`').strip() for m in TRAILER.finditer(visible)]
+
+
+def prefix(path):
+    """A path as git prints it, with one trailing slash: `./src` and `src/` give `src/`."""
+    normal = posixpath.normpath(path).strip('/')
+    if normal in ('', '.') or normal.startswith('..'):
+        raise CheckError(f'{path!r} is not a directory inside the repository')
+    return normal + '/'
 
 
 def main(argv):
     if len(argv) < 4:
         print('usage: check-untested-source.py <base> <head> <path prefix>...', file=sys.stderr)
         return 2
-    prefixes = tuple(p.strip('/') + '/' for p in argv[3:])
+    prefixes = tuple(prefix(p) for p in argv[3:])
     files = changed_files(argv[1], argv[2])
     sources = [p for p in files if is_source(p, prefixes)]
     tests = [p for p in files if is_test(p)]
