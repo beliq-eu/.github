@@ -22,7 +22,7 @@ on:
         default: true
       ubicloud:
         description: >-
-          Run the four jobs on Ubicloud instead of a GitHub-hosted runner. The caller decides,
+          Run every job on Ubicloud instead of a GitHub-hosted runner. The caller decides,
           because the kill switch is its own repository variable and because the Ubicloud App
           is granted per repository: a caller it does not cover must leave this false or its
           jobs wait for a runner that will never come.
@@ -32,9 +32,17 @@ on:
           invisible to any check that classifies a workflow by reading its `runs-on` values,
           which is how a job can be moved onto another machine without that check noticing.
           Both labels stay literal and on the line here, so such a check can still read which
-          machines these four jobs can reach.
+          machines these jobs can reach.
         type: boolean
         default: false
+      source-paths:
+        description: >-
+          Path prefixes, separated by spaces, that hold the repository's source code. On a pull
+          request by a person, the no-test job fails when a code file under one of them is added
+          or changed, no test file is, and the body has no `No-Test: <reason>` line. Empty, the
+          default, skips the job.
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -178,3 +186,35 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: python3 .guard/scripts/check-new-dependencies.py HEAD^1 HEAD
+
+  # A source change with no test needs a reason a reviewer can read. Off unless the caller names
+  # its source paths. A bot's pull request is skipped, because no person is there to write the
+  # reason.
+  no-test:
+    if: >-
+      github.event_name == 'pull_request' && inputs.source-paths != ''
+      && github.event.pull_request.user.type != 'Bot'
+    runs-on: ${{ inputs.ubicloud && 'ubicloud-standard-2' || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      # The test merge commit and its first parent, the base it is compared with.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .guard
+          persist-credentials: false
+
+      # The body comes from the event, so a re-run reads it as it was when the run started.
+      - name: A source change ships a test, or the body says why not
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          SOURCE_PATHS: ${{ inputs.source-paths }}
+        run: |
+          read -ra paths <<< "$SOURCE_PATHS"
+          python3 .guard/scripts/check-untested-source.py HEAD^1 HEAD "${paths[@]}"
