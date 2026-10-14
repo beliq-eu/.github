@@ -1,6 +1,6 @@
 # beliq-eu shared configuration
 
-Org-wide Renovate presets, and the guard workflow every repo's CI calls. Repos reference
+Org-wide Renovate presets for the [beliq](https://beliq.eu) repos, and the guard workflow every repo's CI calls. Repos reference
 these instead of duplicating the full policy.
 
 ## Presets
