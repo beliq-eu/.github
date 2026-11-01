@@ -8,8 +8,9 @@
     "security:minimumReleaseAgePypi",
     "helpers:pinGitHubActionDigestsToSemver"
   ],
+  "description": "The schedule is six hours wide because the Mend-hosted app visits an active repository every four hours (https://docs.renovatebot.com/mend-hosted/job-scheduling/). A window narrower than that misses every repository whose visits fall outside it, and the same ones week after week: under `before 3am on Monday`, 6 of 27 repositories did not get the `beliq-eu/.github` digest on 2026-10-26, four of them for the third Monday running. Ending at 06:00 UTC keeps the updates before the working day in Europe/Berlin.",
   "timezone": "UTC",
-  "schedule": ["before 3am on Monday"],
+  "schedule": ["before 6am on Monday"],
   "dependencyDashboardLabels": ["stays-open", "next:agent"],
   "packageRules": [
     {
