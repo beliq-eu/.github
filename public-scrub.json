@@ -8,7 +8,8 @@
     "rhysd",
     "shopware",
     "typescript-eslint",
-    "WordPress"
+    "WordPress",
+    "ZUGFeRD"
   ],
   "agentFiles": ["AGENTS.md", "CLAUDE.md"]
 }
