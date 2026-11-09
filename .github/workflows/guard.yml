@@ -99,6 +99,7 @@ jobs:
       # zizmor's GitHub release carries no checksum file, so it comes from PyPI with every
       # hash pinned; Renovate moves the version and rewrites the hashes.
       - name: Install zizmor
+        id: install-zizmor
         run: |
           python3 -m venv "$RUNNER_TEMP/zizmor"
           "$RUNNER_TEMP/zizmor/bin/pip" install --quiet --no-deps --require-hashes \
@@ -108,9 +109,14 @@ jobs:
       # The checksum is upstream's own, from actionlint_1.7.12_checksums.txt in the same
       # release. Nothing bumps it automatically: a bump is a hand edit that moves the hash
       # with the version.
+      # No --retry-delay, because a fixed delay turns off curl's backoff: it waits 1, 2, 4 ...
+      # 128 s between tries (or what a Retry-After header asks), which rides out a few minutes
+      # of 504s from GitHub's release downloads. No try starts after 300 s, and each ends by
+      # 120 s, so the step is done within about 7 minutes.
       - name: Install actionlint
+        id: install-actionlint
         run: |
-          curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
+          curl -fsSL --retry 8 --retry-max-time 300 --retry-connrefused \
             --connect-timeout 10 --max-time 120 \
             -o "$RUNNER_TEMP/actionlint.tar.gz" \
             https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
@@ -123,13 +129,14 @@ jobs:
       # before the floor can drop. The token lets the online audits run, among them the
       # check that a pinned commit really belongs to the action's own repository.
       - name: zizmor
+        if: ${{ !cancelled() && steps.install-zizmor.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: zizmor --no-progress --min-severity high .github
 
       # Runs the shellcheck the runner image ships on every `run:` script.
       - name: actionlint
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.install-actionlint.outcome == 'success' }}
         run: '"$RUNNER_TEMP/actionlint" -color'
 
   secrets:
@@ -143,10 +150,10 @@ jobs:
 
       # The checksum is upstream's own, from gitleaks_8.30.1_checksums.txt in the same release.
       # Nothing bumps it automatically: a bump is a hand edit that moves the hash with the
-      # version.
+      # version. It retries as the actionlint install does, for the same reason.
       - name: Install gitleaks
         run: |
-          curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
+          curl -fsSL --retry 8 --retry-max-time 300 --retry-connrefused \
             --connect-timeout 10 --max-time 120 \
             -o "$RUNNER_TEMP/gitleaks.tar.gz" \
             https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
