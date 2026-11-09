@@ -99,6 +99,7 @@ jobs:
       # zizmor's GitHub release carries no checksum file, so it comes from PyPI with every
       # hash pinned; Renovate moves the version and rewrites the hashes.
       - name: Install zizmor
+        id: install-zizmor
         run: |
           python3 -m venv "$RUNNER_TEMP/zizmor"
           "$RUNNER_TEMP/zizmor/bin/pip" install --quiet --no-deps --require-hashes \
@@ -108,9 +109,10 @@ jobs:
       # The checksum is upstream's own, from actionlint_1.7.12_checksums.txt in the same
       # release. Nothing bumps it automatically: a bump is a hand edit that moves the hash
       # with the version.
-      # No --retry-delay: without it curl waits 1, 2, 4 ... 128 s between tries, which rides
-      # out a few minutes of 504s from GitHub's release downloads. A fixed 2 s delay gave up
-      # after about 10 s.
+      # No --retry-delay, because a fixed delay turns off curl's backoff: it waits 1, 2, 4 ...
+      # 128 s between tries (or what a Retry-After header asks), which rides out a few minutes
+      # of 504s from GitHub's release downloads. No try starts after 300 s, and each ends by
+      # 120 s, so the step is done within about 7 minutes.
       - name: Install actionlint
         id: install-actionlint
         run: |
@@ -127,6 +129,7 @@ jobs:
       # before the floor can drop. The token lets the online audits run, among them the
       # check that a pinned commit really belongs to the action's own repository.
       - name: zizmor
+        if: ${{ !cancelled() && steps.install-zizmor.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: zizmor --no-progress --min-severity high .github
