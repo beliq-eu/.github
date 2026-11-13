@@ -1,12 +1,5 @@
 #!/usr/bin/env node
-// Fails when a public repo carries internal planning material: a roadmap or runbook file, a
-// local home path, a link to the private planning store, or a link into a GitHub account
-// that is not on the public list in public-scrub.json. Every repo this account owns is
-// public, so anything internal that lands in one is published on the next push.
-//
-// The patterns are generic on purpose. A list of the private names would publish them in
-// this file, and the failure output names only the file, line and rule, never the matched
-// text, because a public repo's CI log is public too.
+// Checks a repo's tracked files against the rules below and public-scrub.json.
 //
 // Usage: node scripts/check-public-scrub.mjs <repo-dir> [<repo-dir> ...]
 // Exit codes: 0 clean, 1 findings, 2 the check itself could not run.

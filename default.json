@@ -98,6 +98,6 @@
   ],
   "vulnerabilityAlerts": {
     "labels": ["security"],
-    "assignees": ["tobias-dev"]
+    "assignees": ["beliq-eu"]
   }
 }
