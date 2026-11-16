@@ -11,7 +11,7 @@
   "description": "The schedule is six hours wide because the Mend-hosted app visits an active repository every four hours (https://docs.renovatebot.com/mend-hosted/job-scheduling/). A window narrower than that misses every repository whose visits fall outside it, and the same ones week after week: under `before 3am on Monday`, 6 of 27 repositories did not get the `beliq-eu/.github` digest on 2026-10-26, four of them for the third Monday running. Ending at 06:00 UTC keeps the updates before the working day in Europe/Berlin.",
   "timezone": "UTC",
   "schedule": ["before 6am on Monday"],
-  "dependencyDashboardLabels": ["stays-open", "next:agent"],
+  "dependencyDashboard": { "labels": ["stays-open", "next:agent"] },
   "packageRules": [
     {
       "description": "Pin every GitHub Action to a full commit SHA. A tag is mutable: whoever can move `v4` can run their code inside a workflow holding GHCR push credentials, sibling PATs and deploy access. Scoped to github-actions on purpose: pinning Docker tags too would freeze the `:latest` the engine deploy moves by hand. Scoped to five dep types inside that manager: actions, reusable workflows, `docker://` steps, and the images under `container:` and `services:`. The manager also reads a version typed into a `with:` input (dep type `uses-with`), and without the dep types Renovate proposes a commit digest for `astral-sh/setup-uv`'s `version:` input, which takes a version of uv. `helpers:pinGitHubActionDigestsToSemver` in `extends` sets the same for actions and reusable workflows, so for those two this rule repeats it; the three image types are pinned by this rule alone.",
