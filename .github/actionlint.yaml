@@ -5,3 +5,6 @@ paths:
   .github/workflows/guard.yml:
     ignore:
       - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/lockfile-age-rerun.yml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'

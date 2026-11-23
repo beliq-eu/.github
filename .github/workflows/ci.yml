@@ -121,6 +121,15 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 scripts/check-untested-source.test.py
 
+      # Includes one case against the real npm, as the new-dependency test does.
+      - name: Test the lockfile age check and its re-run
+        if: ${{ !cancelled() }}
+        env:
+          GUARD_LIVE_REGISTRIES: '1'
+        run: |
+          python3 scripts/check-lockfile-age.test.py
+          python3 scripts/rerun-lockfile-age.test.py
+
       # Forks are left out: their content is upstream's, not ours. This step and the next
       # run even when the tests fail, so a red test cannot hide a finding in another repo.
       - name: Clone every repo this account owns

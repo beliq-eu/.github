@@ -194,6 +194,31 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: python3 .guard/scripts/check-new-dependencies.py HEAD^1 HEAD
 
+  # On a pull request only, like `dependencies`. A repository with no yarn.lock passes with nothing
+  # to read. Nothing re-runs a failed job once its versions have aged, so a repository that needs
+  # it to go green on its own also calls lockfile-age-rerun.yml on a schedule.
+  lockfile-age:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ${{ inputs.ubicloud && 'ubicloud-standard-2' || 'ubuntu-latest' }}
+    # Reading a whole yarn.lock of 1012 entries took 174 s on a laptop on 2026-11-23.
+    timeout-minutes: 20
+    steps:
+      # The test merge commit and its first parent, the base it is compared with.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .guard
+          persist-credentials: false
+
+      - name: Every version a yarn.lock adds is at least 72 hours old
+        run: python3 .guard/scripts/check-lockfile-age.py HEAD^1 HEAD
+
   # A source change with no test needs a reason a reviewer can read. Off unless the caller names
   # its source paths. A bot's pull request is skipped, because no person is there to write the
   # reason.

@@ -1,0 +1,52 @@
+name: Lockfile age re-run
+
+# Re-runs the guard's failed `lockfile-age` job on every open pull request, so a pull request held
+# back by a version that was too young goes green once the version is old enough. Called on a
+# schedule from a repo's own workflow:
+#
+#   on:
+#     schedule:
+#       - cron: '41 5 * * *'
+#     workflow_dispatch:
+#   permissions: {}
+#   jobs:
+#     rerun:
+#       permissions:
+#         actions: write
+#         contents: read
+#         pull-requests: read
+#       uses: beliq-eu/.github/.github/workflows/lockfile-age-rerun.yml@<commit> # main
+#
+# Pin the commit, as for guard.yml.
+
+on:
+  workflow_call:
+    inputs:
+      ubicloud:
+        description: Run on Ubicloud instead of a GitHub-hosted runner, as in guard.yml.
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  rerun:
+    runs-on: ${{ inputs.ubicloud && 'ubicloud-standard-2' || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      # Re-running a job.
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .guard
+          persist-credentials: false
+
+      - name: Re-run each failed lockfile-age job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .guard/scripts/rerun-lockfile-age.py

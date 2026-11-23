@@ -456,7 +456,7 @@ A private repository calls it with `with: public-scrub: false`. The scrub enforc
 appear in a public repository; the other checks run either way. A repository turns the
 `no-test` job on by naming its source directories, for example `with: source-paths: src/`.
 
-Five jobs:
+Six jobs:
 
 - `content`: the public scrub, the hidden-character check and the session-path check, all
   below.
@@ -471,6 +471,8 @@ Five jobs:
   `.gitleaksignore` apply.
 - `dependencies`: on a pull request only, the new-dependency check below. On any other
   event it is skipped, which a required check counts as passed.
+- `lockfile-age`: on a pull request only, the lockfile age check below. Otherwise it is
+  skipped.
 - `no-test`: on a pull request by a person, in a repository that sets `source-paths`, the
   check on source changes without a test below. Otherwise it is skipped.
 
@@ -565,6 +567,37 @@ calling workflow also runs on `pull_request` `edited`. Locally:
 `PR_BODY="..." python3 scripts/check-new-dependencies.py <base> <head>` in a repo, and
 `python3 scripts/check-new-dependencies.test.py` here (`GUARD_LIVE_REGISTRIES=1` adds one
 case against the real registries).
+
+### Lockfile age
+
+`scripts/check-lockfile-age.py` compares every yarn 1 `yarn.lock` at a pull request's test
+merge commit with the same path at its base. Each `name@version` the base did not hold,
+dependencies of dependencies included, must have been published on npm at least 72 hours
+before the run. The machines that install these lockfiles run Aikido Safe Chain, which refuses
+a tarball younger than that, so a lockfile with a younger version fails to install there.
+
+This is the half of [Minimum release age](#minimum-release-age) that Renovate cannot do for
+yarn 1. Renovate ages the version it proposes. The `yarn upgrade` or `yarn install` it then
+runs locks the newest version inside each range, whatever its age, for the package and for
+everything below it, because yarn 1 has no publish-date cutoff. On 2026-11-23 a knip update
+that Renovate had aged to 6.46.1 locked 6.48.0, a day old, and a dependency of knip that the
+pull request did not name moved with it.
+
+Only added versions are read: one packument can weigh over 30 MB, and a version on the base
+was checked by the pull request that added it. A local path is not read. A tarball from a host
+other than the npm registry is named in the output and not checked. A registry that fails
+three times makes the job exit 2, never pass.
+
+Nothing re-runs a failed job once its versions have aged. A repo that wants the pull request to
+go green on its own, so that auto-merge goes ahead, calls
+`.github/workflows/lockfile-age-rerun.yml` once a day; its header shows the caller. It runs
+`scripts/rerun-lockfile-age.py`, which re-runs the newest `lockfile-age` job on the head of
+each open pull request when that job failed. It needs only the run's own token, with
+`actions: write`. A pull request can wait up to a day longer than 72 hours that way; a push or
+a manual re-run is sooner. Locally: `python3 scripts/check-lockfile-age.py <base> <head>` in a
+repo, and `python3 scripts/check-lockfile-age.test.py` and
+`python3 scripts/rerun-lockfile-age.test.py` here (`GUARD_LIVE_REGISTRIES=1` adds one case
+against the real npm).
 
 ### Source changes without a test
 
