@@ -5,8 +5,9 @@ check-lockfile-age.py fails while a lockfile holds a version that is too young, 
 re-runs it once the version has aged: no push, no event. Run once a day, this script re-runs it,
 so the pull request goes green on its own and auto-merge can go ahead.
 
-A head counts when its newest `lockfile-age` job, by start time, ended in failure. A run still
-in progress, and a job that passed or was cancelled, are left alone.
+A head counts when its newest `lockfile-age` job ended in failure or timed out. A job still
+queued or running, and one that passed or was cancelled, are left alone. So is a run past GitHub's
+30-day re-run limit, which the output names.
 
 Environment: GH_TOKEN (actions: write, pull-requests: read), GITHUB_REPOSITORY (owner/name),
 GITHUB_API_URL (set by Actions; https://api.github.com otherwise).
@@ -16,6 +17,7 @@ stop the others.
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 import sys
 import urllib.error
 import urllib.parse
@@ -23,6 +25,9 @@ import urllib.request
 
 JOB_NAME = 'lockfile-age'
 PAGE_SIZE = 100
+# GitHub re-runs a workflow run only within 30 days of its start.
+RERUN_LIMIT = timedelta(days=30)
+RERUN_CONCLUSIONS = ('failure', 'timed_out')
 API_TIMEOUT_SECONDS = 30
 
 
@@ -66,31 +71,41 @@ def is_lockfile_age(job):
 
 
 def newest_lockfile_age_job(repo, sha, token, base):
-    jobs = []
+    """(job, run) for the newest lockfile-age job on the head, or None."""
+    found = []
     runs = pages(f'/repos/{repo}/actions/runs?event=pull_request&head_sha={sha}', 'workflow_runs', token, base)
     for run in runs:
         # The jobs of the run's latest attempt, which is what the pull request shows.
-        jobs += [j for j in pages(f'/repos/{repo}/actions/runs/{run["id"]}/jobs', 'jobs', token, base)
-                 if is_lockfile_age(j)]
-    return max(jobs, key=lambda j: j.get('started_at') or '', default=None)
+        found += [(j, run) for j in pages(f'/repos/{repo}/actions/runs/{run["id"]}/jobs', 'jobs', token, base)
+                  if is_lockfile_age(j)]
+    return max(found, key=lambda pair: pair[0]['created_at'], default=None)
+
+
+def parse_time(value):
+    return datetime.fromisoformat(value.replace('Z', '+00:00'))
 
 
 def main():
     token = os.environ['GH_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
     base = os.environ.get('GITHUB_API_URL', 'https://api.github.com').rstrip('/')
+    now = datetime.now(timezone.utc)
     rerun = 0
     refused = 0
     pulls = list(pages(f'/repos/{repo}/pulls?state=open', None, token, base))
     for pull in pulls:
         sha = pull['head']['sha']
-        job = newest_lockfile_age_job(repo, urllib.parse.quote(sha), token, base)
-        if job is None or job['conclusion'] != 'failure':
+        newest = newest_lockfile_age_job(repo, urllib.parse.quote(sha), token, base)
+        if newest is None or newest[0]['conclusion'] not in RERUN_CONCLUSIONS:
+            continue
+        job, run = newest
+        if now - parse_time(run['created_at']) > RERUN_LIMIT:
+            print(f'#{pull["number"]}: {job["html_url"]} is past the 30-day re-run limit; push to the branch to run it again')
             continue
         try:
             api('POST', f'/repos/{repo}/actions/jobs/{job["id"]}/rerun', token, base)
         except ApiError as err:
-            # GitHub refuses to re-run a run older than 30 days; the other heads still get theirs.
+            # The other heads still get theirs.
             refused += 1
             print(f'#{pull["number"]}: {err}', file=sys.stderr)
             continue

@@ -11,6 +11,7 @@ import sys
 import threading
 import unittest
 import urllib.parse
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -74,17 +75,22 @@ class FakeApi:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.base = f'http://127.0.0.1:{self.server.server_port}'
 
-    def pull(self, number, sha, runs):
-        """runs: [(run id, [(job id, name, status, conclusion, started_at)])]"""
+    def pull(self, number, sha, runs, run_days_ago=1):
+        """runs: [(run id, [(job id, name, status, conclusion, created_at)])]"""
         self.pulls.append({'number': number, 'head': {'sha': sha}})
-        self.runs[sha] = [{'id': run_id} for run_id, _ in runs]
+        self.runs[sha] = [{'id': run_id, 'created_at': days_ago(run_days_ago)} for run_id, _ in runs]
         for run_id, jobs in runs:
-            self.jobs[run_id] = [{'id': j, 'name': n, 'status': s, 'conclusion': c, 'started_at': t,
+            self.jobs[run_id] = [{'id': j, 'name': n, 'status': s, 'conclusion': c, 'created_at': t,
+                                  'started_at': None if s == 'queued' else t,
                                   'html_url': f'https://example.invalid/job/{j}'} for j, n, s, c, t in jobs]
 
 
-def job(job_id, conclusion, started='2026-11-23T10:00:00Z', name='guard / lockfile-age', status='completed'):
-    return (job_id, name, status, conclusion, started)
+def days_ago(days):
+    return (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def job(job_id, conclusion, created='2026-11-23T10:00:00Z', name='guard / lockfile-age', status='completed'):
+    return (job_id, name, status, conclusion, created)
 
 
 class RerunLockfileAge(unittest.TestCase):
@@ -118,6 +124,27 @@ class RerunLockfileAge(unittest.TestCase):
         code, _, err = self.run_script()
         self.assertEqual(code, 0, err)
         self.assertEqual(self.api.posts, [f'/repos/{REPO}/actions/jobs/41/rerun'])
+
+    def test_a_newer_queued_job_beats_an_older_failed_one(self):
+        self.api.pull(7, 'aaa', [(1, [job(11, 'failure', '2026-11-23T10:00:00Z')]),
+                                 (2, [job(21, None, '2026-11-23T11:00:00Z', status='queued')])])
+        code, _, err = self.run_script()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.api.posts, [])
+
+    def test_a_timed_out_job_is_rerun(self):
+        self.api.pull(7, 'aaa', [(1, [job(11, 'timed_out')])])
+        code, _, err = self.run_script()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.api.posts, [f'/repos/{REPO}/actions/jobs/11/rerun'])
+
+    def test_a_run_past_the_30_day_limit_is_named_and_not_rerun(self):
+        self.api.pull(7, 'aaa', [(1, [job(11, 'failure')])], run_days_ago=31)
+        self.api.pull(8, 'bbb', [(2, [job(21, 'failure')])], run_days_ago=29)
+        code, out, err = self.run_script()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.api.posts, [f'/repos/{REPO}/actions/jobs/21/rerun'])
+        self.assertIn('#7: https://example.invalid/job/11 is past the 30-day re-run limit', out)
 
     def test_a_job_in_progress_or_cancelled_is_left_alone(self):
         self.api.pull(7, 'aaa', [(1, [job(11, None, status='in_progress')])])

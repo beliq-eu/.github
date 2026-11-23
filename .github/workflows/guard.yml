@@ -200,7 +200,8 @@ jobs:
   lockfile-age:
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ${{ inputs.ubicloud && 'ubicloud-standard-2' || 'ubuntu-latest' }}
-    timeout-minutes: 10
+    # Reading a whole yarn.lock of 1012 entries took 174 s on a laptop on 2026-11-23.
+    timeout-minutes: 20
     steps:
       # The test merge commit and its first parent, the base it is compared with.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

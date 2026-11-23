@@ -21,6 +21,7 @@ Exit codes: 0 clean, 1 findings, 2 the check itself could not run.
 The output names packages, versions and lockfile paths, which the pull request already shows.
 """
 
+import http.client
 import json
 import os
 import re
@@ -130,8 +131,9 @@ def fetch_json(url):
             error = f'HTTP {err.code}'
             if err.code < 500 and err.code != 429:
                 break
-        except (urllib.error.URLError, TimeoutError, ValueError) as err:
-            error = str(err)
+        # OSError covers URLError, a timeout and a reset connection; HTTPException a body cut short.
+        except (OSError, http.client.HTTPException, ValueError) as err:
+            error = str(err) or type(err).__name__
     raise CheckError(f'{url}: {error}')
 
 
@@ -142,7 +144,8 @@ def publish_times(name):
         return None
     return {version: datetime.fromisoformat(stamp.replace('Z', '+00:00'))
             for version, stamp in (doc.get('time') or {}).items()
-            if version not in ('created', 'modified')}
+            # An unpublished package keeps an `unpublished` object here.
+            if version not in ('created', 'modified') and isinstance(stamp, str)}
 
 
 def main(argv):
@@ -176,7 +179,7 @@ def main(argv):
     for (name, version), path in sorted(to_check.items()):
         package_times = times[name]
         if package_times is None:
-            failures.append(f'{path}: {name} does not exist on npm')
+            failures.append(f'{path}: {name} does not exist on npm (read without a token)')
             continue
         published = package_times.get(version)
         if published is None:
@@ -193,7 +196,7 @@ def main(argv):
 
     for failure in failures:
         print(failure, file=sys.stderr)
-    if clears:
+    if clears and len(clears) == len(failures):
         print(f'Every version is {MIN_AGE_HOURS} hours old at {max(clears):%Y-%m-%d %H:%M} UTC. A re-run of this '
               'job after that time passes. Where the repository calls lockfile-age-rerun.yml on a schedule, that '
               're-run happens once a day without anyone pushing. To pass sooner, lock an older version.',

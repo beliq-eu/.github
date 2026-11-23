@@ -59,6 +59,7 @@ class FakeRegistry:
     def __init__(self):
         self.routes = {}
         self.requested = []
+        self.truncate = set()
         registry = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -68,7 +69,7 @@ class FakeRegistry:
                 payload = json.dumps(body).encode()
                 self.send_response(status)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Content-Length', str(len(payload)))
+                self.send_header('Content-Length', str(len(payload) + (100 if self.path in registry.truncate else 0)))
                 self.end_headers()
                 self.wfile.write(payload)
 
@@ -119,6 +120,7 @@ class LockfileAgeCheck(unittest.TestCase):
     def setUp(self):
         self.registry.routes.clear()
         self.registry.requested.clear()
+        self.registry.truncate.clear()
 
     def run_check(self, base, head, extra_env=None, registry=None):
         repo = make_repo(self.tmp.name, base, head)
@@ -252,7 +254,29 @@ class LockfileAgeCheck(unittest.TestCase):
     def test_a_package_npm_does_not_know_fails(self):
         code, _, err = self.run_check({'yarn.lock': lockfile()}, {'yarn.lock': lockfile(block('ghost@^1', '1.0.0'))})
         self.assertEqual(code, 1)
-        self.assertIn('yarn.lock: ghost does not exist on npm', err)
+        self.assertIn('yarn.lock: ghost does not exist on npm (read without a token)', err)
+
+    def test_an_unpublished_package_fails_by_name(self):
+        self.registry.routes['/gone'] = (200, {'name': 'gone', 'time': {'created': hours_ago(900), 'unpublished': {'time': hours_ago(10)}}})
+        code, _, err = self.run_check({'yarn.lock': lockfile()}, {'yarn.lock': lockfile(block('gone@^1', '1.0.0'))})
+        self.assertEqual(code, 1)
+        self.assertIn('npm gives no publish time for gone@1.0.0', err)
+
+    def test_a_finding_that_waiting_cannot_clear_drops_the_wait_hint(self):
+        self.registry.npm('young', **{'1_0_0': 1})
+        code, _, err = self.run_check(
+            {'yarn.lock': lockfile()}, {'yarn.lock': lockfile(block('young@^1', '1.0.0'), block('ghost@^1', '1.0.0'))})
+        self.assertEqual(code, 1)
+        self.assertIn('young@1.0.0 was published', err)
+        self.assertNotIn('A re-run of this job after that time passes', err)
+
+    def test_a_body_cut_short_is_retried_and_exit_2(self):
+        self.registry.npm('knip', **{'6_48_0': 900})
+        self.registry.truncate.add('/knip')
+        code, _, err = self.run_check({'yarn.lock': lockfile()}, {'yarn.lock': lockfile(block('knip@^6', '6.48.0'))})
+        self.assertEqual(code, 2)
+        self.assertNotIn('Traceback', err)
+        self.assertEqual(self.registry.requested, ['/knip'] * 3)
 
     def test_a_version_npm_gives_no_time_for_fails(self):
         self.registry.npm('knip', **{'6_45_1': 900})
